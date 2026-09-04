@@ -1,0 +1,457 @@
+# Robot Architecture
+
+本ドキュメントは **Human Following Robot Car の詳細アーキテクチャ**を説明する。
+
+対象範囲
+
+* ROS2 ノード構成（3層アーキテクチャ）
+* AI モード排他制御（Lifecycle ノード管理）
+* 知覚・制御パイプライン
+* MCU 通信プロトコル
+* センサーフュージョン
+* 安全設計
+
+---
+
+# 1 System Overview
+
+ロボットは **3層アーキテクチャ + AI 頭脳層**で設計されている。
+
+```
+┌─────────────────────────────────────────────────┐
+│  第3層: AI 頭脳層（ai_core_managers.launch.py）  │
+│  speech_io / LLM / YOLO追従 / YOLO-World        │
+└───────────────────┬─────────────────────────────┘
+                    │ /state_manager/command
+┌───────────────────▼─────────────────────────────┐
+│  第2層: 自律移動層（autonomy.launch.py）          │
+│  SLAM Toolbox / Nav2 / AMCL                     │
+└───────────────────┬─────────────────────────────┘
+                    │ /cmd_vel / /scan_*_filtered
+┌───────────────────▼─────────────────────────────┐
+│  第1層: ハードウェア層（hardware_bringup.launch.py）│
+│  カメラ / LiDAR / IMU / Pico W 通信 / オドメトリ  │
+└─────────────────────────────────────────────────┘
+```
+
+---
+
+# 2 Hardware Architecture
+
+```
+Jetson Orin Nano (8GB)
+      │
+      │ USB Serial (UART)
+      ▼
+Raspberry Pi Pico W
+      ├── PWM → BTS7960 Motor Driver → 4WD Motors
+      ├── PWM → Pan-Tilt Servo (Turret)
+      ├── I2C → VL53L0X ToF Sensor
+      └── GPIO → Quadrature Encoder ×4
+
+USB Camera (on Turret) → Jetson (UVC)
+YDLIDAR Tmini-Plus      → Jetson (USB)
+ICM-20948 IMU           → Jetson (I2C)
+```
+
+### Jetson 役割
+
+* TensorRT AI 推論（YOLOv8 / Depth Anything V2 / YOLO-World）
+* ROS2 ノード実行
+* Nav2 ナビゲーション
+* LLM 推論（llama-server: Qwen2.5 1.5B）
+* STT / TTS（faster-whisper / Open JTalk）
+
+### Pico W 役割
+
+* PWM 生成（モーター・サーボ）
+* エンコーダ読み取り
+* ToF 距離測定
+* UART ウォッチドッグ安全制御
+
+---
+
+# 3 第1層: ハードウェア層（hardware_bringup.launch.py）
+
+```
+YDLIDAR Tmini-Plus ──→ /scan ──→ scan_filter_node ──┬─→ /scan_body_filtered
+                                                     │    (自車体のみ除去。cmd_vel
+                                                     │     直接駆動の安全チェック用)
+                                                     └─→ /scan_target_filtered
+                                                          (自車体+追従対象を除去。
+                                                           SLAM/AMCL/コストマップ用)
+
+ICM-20948 ──→ imu_node ──→ /imu/data
+                   │
+                   ▼
+           imu_filter_madgwick ──→ imu_yaw_aligner ──→ /imu/data_aligned
+
+pico_bridge_node ──→ /pico/rev_*        (エンコーダ生値)
+                 ──→ /pico/tof_m        (ToF距離 [m])
+                 ──→ /pico/servo_state  (サーボ角度)
+                 ←── /cmd_vel          (速度指令)
+                 ←── /pico/servo_target (サーボ目標)
+
+wheel_odom_node (/pico/rev_* + 速度依存補正) ──→ /wheel_odom
+
+ekf_filter_node (/wheel_odom + /imu/data_aligned) ──→ /odometry/filtered → Nav2
+
+ai_perception_container（常駐 ComposableNodeContainer）
+  └── v4l2_camera ──→ /image_raw + /camera_info
+  └── format_converter ──→ /image (rgb8)
+  └── format_converter_bgr ──→ /apriltag/image_bgr (bgr8, AprilTag向け系統)
+  └── rectify_node ──→ /apriltag/image_rect + /apriltag/camera_info_rect
+  └── [YOLO/Depth ノードは yolo_follow_node 起動時に動的注入]
+```
+
+`format_converter_bgr` + `rectify_node` は AprilTag自己位置推定（`todo/apriltag_localization.md`）向けに追加。
+YOLO用の `format_converter`（rgb8）とは別系統にして影響を分離している。RectifyNode の入力は
+`nitros_image_bgr8` を要求するため bgr8 変換が必要。`apriltag_ros` 自体はこのコンテナには含めず、
+`/apriltag/image_rect` + `/apriltag/camera_info_rect` を購読する別プロセスとしてセッション単位で起動する
+想定（フェーズ5 `apriltag_slam_session_node` / `apriltag_nav_session_node`）。GPU版の `isaac_ros_apriltag`
+は未導入（ワークスペースには `isaac_ros_apriltag_interfaces` のみ存在）で、低頻度用途のため当面CPU版
+`ros-humble-apriltag-ros`（インストール済み）を使う方針（2026-07-07）。
+
+### C++ コンポーネント（toyof_robot_ai_vision）
+
+- `AISpatialEstimatorNode` と `TensorToDepthImageNode` は `ComposableNode` として `ai_perception_container` に内包される
+- ゼロコピー通信（NITROS）を使用するため、`use_intra_process_comms: True` が必須
+- 深度スケール変換: `dist_m = scale_a * raw_val + scale_b`（現在: a=0.765, b=-1.667）
+- `TensorToDepthImageNode` は1秒間引き（点群生成のCPU負荷軽減）
+
+### ai_perception_container の動的注入設計
+
+第1層の `ai_perception_container` に v4l2_camera が常駐する。
+YOLO モード起動時は `yolo_object_follow.launch.py` が `LoadComposableNodes` で
+YOLO/Depth ノードをコンテナに動的注入し、NITROS ゼロコピー通信を維持する。
+YOLO cleanup 時に LoadComposableNodes が SIGINT を受け、コンテナからノードを解放。
+v4l2_camera は生き続けるため DDS ゴーストパブリッシャー問題が発生しない。
+
+---
+
+# 4 第2層: 自律移動層（autonomy.launch.py）
+
+```
+/scan_target_filtered ──→ SLAM Toolbox (Online Async) ──→ /map + TF(map→odom)
+/scan_target_filtered ──→ AMCL ──→ /amcl_pose (Nav モード)
+
+/odometry/filtered + /scan_target_filtered + /map
+  → Nav2 (SmacPlanner2D + DWBLocalPlanner) → /cmd_vel
+```
+
+| mode | 起動内容 |
+|------|----------|
+| `slam` | SLAM Toolbox による地図作成 |
+| `nav`  | AMCL による自己位置推定 + ナビゲーション |
+
+### Nav2 パラメータファイル
+
+用途に応じて複数の yaml が存在する。
+
+| ファイル | 用途 |
+|---|---|
+| `nav2_params.yaml` | 現用（`autonomy.launch.py` が参照） |
+| `nav2_params-standard.yaml` | `nav2_params.yaml` と同内容のバックアップ |
+| `nav2_params-smooth-run.yaml` | 滑らか走行チューニング版 |
+| `nav2_params_local-only.yaml` | 人追従モード用（マップ不要・`global_frame=odom`・`bt_navigator`+`planner_server`+ローリングウィンドウ global_costmap を含む） |
+
+- ローカルコストマップは2D（`use_3d_world: false`）
+- Nav2は `/odometry/filtered` を使用（生ホイールオドメトリではない）。EKFをスキップするとナビゲーション不可
+- カスタム Behavior Tree: `behavior_trees/navigate_w_recovery.xml`（壁際スタック対策・T-23）。リカバリ順序は **BackUp（0.15m/0.10m/s）優先 → Spin（spin_dist=0.4）→ Wait → Clear**。`nav2_params.yaml` の `bt_navigator > default_nav_to_pose_bt_xml` で絶対パス参照（install 先の share パス）
+
+---
+
+# 5 第3層: AI 頭脳層（ai_core_managers.launch.py）
+
+## 5.1 ノード構成
+
+| ノード | 種別 | 役割 |
+|--------|------|------|
+| `ai_mode_manager_node` | 常駐（Node） | AI モード排他制御・ブラックボード管理・Nav2 移動 |
+| `speech_io_node` | 常駐（Node） | STT（faster-whisper）/ TTS（Open JTalk）|
+| `camera_snapshot_service_node` | 常駐（Node） | `/snapshot/camera/take` サービス（VLM 用）|
+| `llm_agent_node` | **非常駐（LifecycleNode）** | Qwen2.5 1.5B / llama.cpp — 対話・コマンド判定 |
+| `yolo_follow_node` | **非常駐（LifecycleNode）** | YOLOv8 人追従パイプライン |
+| `yoloworld_node` | **非常駐（LifecycleNode）** | YOLO-World + Depth Anything V2 ゼロショット探索 |
+| `localization_session_manager_node` | 常駐（Lifecycle、**排他制御対象外**） | Nav2/AMCL 地図確立の一元管理。AIモード切替を跨いでセッションを保持（詳細 → `mode_details.md`） |
+
+## 5.2 AI モード排他制御（ai_mode_manager_node）
+
+Jetson Orin Nano の 8GB メモリ制約のため、LLM・YOLO・YOLO-World は同時起動できない。
+`ai_mode_manager_node` が以下の順序で排他切り替えを行う。
+
+```
+deactivate(current)
+  → cleanup(current)          ← ROS2 Lifecycle: モデルをメモリから解放
+  → echo 3 > /proc/sys/vm/drop_caches  ← OSレベルで強制的にページキャッシュを破棄（泥臭い）
+  → configure(next)           ← 次のモデルをメモリにロード
+  → activate(next)
+```
+
+> **なぜ drop_caches が必要か:**  
+> ROS2 の `on_cleanup` でプロセスを終了しても、Linux のページキャッシュに
+> モデルデータが残り続けることがある。LLM（~3GB）と YOLO（~1GB）を切り替える際、
+> キャッシュが残っていると次モデルのロードで OOM が発生する。
+> そのため `echo 3 > /proc/sys/vm/drop_caches` で OS に強制的にキャッシュを捨てさせている。
+
+- configure タイムアウト: 120s（llama-server 起動考慮）、activate タイムアウト: 60s（初回モデル初期化考慮）
+- deactivate/cleanup タイムアウト: 15s
+- 遷移中: TTS が「モード変更中です」を非同期発話（UX 維持）
+- 失敗時: IDLE に戻り「起動に失敗しました」を TTS
+- drop_caches の実施タイミングはノードごとに異なる（重いモデルロード直前）: yolo_follow は `ai_perception_container` kill+sleep 直後、yoloworld は worker `Popen` 直前、llm は llama-server 起動直前（`process_utils.drop_page_cache()`）
+- yolo / yoloworld が `deactivate:X` で停止した後は `ai_mode_manager_node` が自動で `activate:llm` を発行し LLM モードへ復帰する。ノード自身が終了する場合（yolo ストップワード・yoloworld タイムアウト/発見）はノード側が直接 `activate:llm` を publish するため二重起動にはならない
+
+切り替えコマンド: `/state_manager/command` トピックに `"activate:llm"` 等を publish。
+
+| トピック | 型 | 役割 |
+|---|---|---|
+| `/state_manager/command` | `std_msgs/String` | 遷移コマンド（`"activate:llm"` 等） |
+| `/state_manager/status` | `std_msgs/String` | 現在のシステム状態 |
+| `/speech/user_text` | `std_msgs/String` | speech_io_node → llm_agent_node（STT 認識テキスト） |
+| `/speech/speak_command` | `std_msgs/String` | llm_agent_node → speech_io_node（TTS 発話） |
+| `/speech/interrupt` | `std_msgs/String` | speech_io_node → llm_agent_node |
+| `/speech/status` | `std_msgs/String` | speech_io_node の状態 |
+| `/speech/last_response` | `std_msgs/String` | llm_agent_node の最終応答 |
+
+**CUDA メモリ断片化の注意:** Jetson Orin Nano は CPU/GPU でメモリを共有。`ai_perception_container`
+（NITROS/GXF）が先に起動して CUDA メモリを断片化させると、後から起動する llama-server が
+compute buffer（~300MB）用の連続ブロックを確保できず OOM で失敗することがある。
+LLM を `ai_perception_container` より先に起動するか、STT（~960MB）等が多くのメモリを
+保持している状態で LLM を起動しない。コンテナ起動直後（メモリクリーンな状態）で
+LLM を先に起動するのが最も確実。
+
+**GPU ウォームアップ知見（2026-06-08 実証）:** cuDNN autotuning はプロセスメモリ内のみで、
+プロセス間で引き継がれない。yoloworld の初回推論は常に ~8-15s かかる（2回目以降は 0.05s）。
+サブプロセス方式・実 Lifecycle 方式いずれもウォームアップ効果なし。
+
+## 5.3 ブラックボード（/tmp/robot_context.json）
+
+AI ノード間の状態共有に使うファイルベースのブラックボード。
+
+```json
+{
+  "current_state": "LLM_ACTIVE",
+  "active_node": "llm",
+  "task": null,
+  "task_args": {},
+  "target_object": null,
+  "target_room": null,
+  "target_coords": null,
+  "scene_description": null,
+  "last_updated": "2026-06-04T..."
+}
+```
+
+## 5.4 音声対話フロー
+
+```
+[マイク]
+  → speech_io_node (VAD → STT) → /speech/user_text
+        ↓
+  llm_agent_node (ウェイクワード検出 → LLM 推論 → コマンド判定)
+        ├── /speech/speak_command → speech_io_node (TTS) → [スピーカー]
+        └── /state_manager/command → ai_mode_manager_node (Lifecycle 制御)
+```
+
+ウェイクワード `ヘイロボ` 検出後 20s 間はウェイクワード不要。
+
+---
+
+# 6 知覚・追従パイプライン（YOLO モード）
+
+`yolo_follow_node` の `on_configure` で `yolo_object_follow.launch.py` が起動する。
+
+```
+ai_perception_container へ LoadComposableNodes で動的注入:
+  /image (rgb8)
+    ├──→ yolo_encoder → yolo_tensorrt → yolo_decoder → /detections_output
+    └──→ depth_encoder → depth_tensorrt (depth_tensor)
+                             ├──→ ai_spatial_estimator → /ai/target_spatial (Point)
+                             └──→ tensor_to_depth_image_node
+                                     → /camera/depth/image_raw
+                                     → point_cloud_xyz → /camera/depth/points
+
+/detections_output
+  → object_tracking_info_node → /object_tracking/info (PersonTrackingInfo)
+        ├──→ follow_goal_generator_node
+        │       + /ai/target_spatial (最優先)
+        │       + /pico/tof_m (第2優先)
+        │       + BBox高さ推定 (第3優先)
+        │       → NavigateToPose (Nav2) → /cmd_vel
+        └──→ turret_tracker_node → /pico/servo_target (PID サーボ制御)
+```
+
+### 距離推定優先順位
+
+| 優先度 | ソース | 説明 |
+|--------|--------|------|
+| 1位 | AI深度 (`/ai/target_spatial`) | Depth Anything V2 メトリック深度（300〜500ms 遅延） |
+| 2位 | ToF (`/pico/tof_m`) | 砲塔搭載 VL53L0X（ターゲット方向のみ） |
+| 3位 | BBox高さ推定 | バウンディングボックスサイズから逆算 |
+| 4位 | 固定値 2m | フォールバック |
+
+### サーボ角度考慮
+
+砲塔（Pan-Tilt）の Pan 角度を `/pico/servo_state` から取得し、
+2D 回転行列でゴール座標を base_link 基準に変換してから Nav2 へ送信する。
+
+```python
+pan_rad = math.radians(current_pan_deg)
+x_base = x_turret * math.cos(pan_rad) - y_turret * math.sin(pan_rad)
+y_base = x_turret * math.sin(pan_rad) + y_turret * math.cos(pan_rad)
+```
+
+### カスタムメッセージ: `ObjectTrackingInfo`
+
+| フィールド | 型 | 内容 |
+|---|---|---|
+| `target_visible` | bool | ターゲット検出フラグ |
+| `center_error` | float32 | 画像X中心からのズレ（正=左） |
+| `center_y_error` | float32 | 画像Y方向のズレ（正=上） |
+| `bbox_area_norm` | float32 | バウンディングボックス面積（正規化） |
+| `confidence` | float32 | YOLO信頼度 |
+| `tracking_id` | string | トラッキングID（ロックオン用） |
+
+- `object_tracking_info_node` の追従モード: `/target_id` トピックでIDロックオン、空文字で最大面積モードに戻る。追従クラスは `target_class_ids` パラメータで指定（デフォルト: `["0", "person"]`）
+- `follow_goal_generator_node` は `/object_tracking/goal_pose`（PoseStamped, goal_frame=odom）を `goal_update_rate_hz` ごとに publish する。`scan_filter_node` の Object filter がこれを購読して追従対象をスキャンから除外する
+- ロスト時リカバリー（`recovery_mode` パラメータ）詳細 → [`../todo/object_tracking_recovery.md`](../todo/object_tracking_recovery.md)
+
+---
+
+# 7 YOLO-World 物体探索パイプライン（Step 4）
+
+`yoloworld_node` の `on_configure` で YOLO-World + Depth Anything V2 をロード。
+バックグラウンドスレッドで検出ループを実行（ROS スピンスレッドをブロックしない）。
+
+```
+1. ai_mode_manager_node がコンテキストから target_object を読み取る
+2. yoloworld_node が YOLO-World でゼロショット検出
+3. 検出 BBox 中心の深度 → 3D カメラ座標 → TF2 で map 座標変換
+4. target_coords を context に保存
+5. deactivate:yoloworld を publish → ai_mode_manager が Nav2 ゴール送信
+```
+
+---
+
+# 8 センサーフュージョン
+
+```
+wheel_odom_node
+  エンコーダパルス差分 × 速度依存補正係数 → /wheel_odom (x, y, yaw)
+
+EKF (robot_localization)
+  /wheel_odom  (x, y, yaw)
+  /imu/data_aligned (yaw, vyaw)
+  → /odometry/filtered → Nav2
+```
+
+### 速度依存補正（wheel_odom.yaml 抜粋）
+
+4WD 構成の滑り補正を実測キャリブレーションで求めた係数で実施。
+**8つのスケール係数はドライブトレインごとの実測値。別のロボットにそのままコピーしないこと。**
+
+```yaml
+enable_speed_scaling: true
+v_scale_low: 0.11        # 低速閾値 (m/s)
+v_scale_high: 0.36       # 高速閾値 (m/s)
+dist_scale_low: 1.156    # 低速時の距離補正
+dist_scale_high: 1.462   # 高速時の距離補正
+yaw_scale_low: 0.505     # 低速時の旋回補正
+yaw_scale_high: 0.800    # 高速時の旋回補正
+```
+
+### スリップ検出・修復（W-1, 2026-06-26 追加 / W-1-4・W-1-6 で改修）
+
+スリップ判定中は **回転のみ** `self.theta` を IMU 絶対 yaw 差分で置換し、幻の回転積分を防ぐ。
+判定入力は判定非依存の校正済みホイール角速度（旧 `w_ema` 入力は自己発振バグの原因だったため廃止）。
+**並進は抑制しない**（W-1-6）: 判定はスキッドステアの正常旋回でも誤発火し、並進を削ると
+旋回→前進のたびに前進距離が過少カウントされてオドムが崩れるため。スリップ中の並進過大は
+cov ブーストで EKF に down-weight させる。
+
+| パラメータ | デフォルト | 意味 |
+|---|---|---|
+| `slip_detect_enable` | `true` | スリップ検出の有効/無効 |
+| `slip_w_wheel_high` | `0.40` rad/s | 校正済みホイール角速度がこれを超え、かつ… |
+| `slip_w_imu_low` | `0.15` rad/s | …IMU 角速度がこれ未満なら空転と判定（回転のみ IMU 置換） |
+| `slip_cov_yaw_boost` | `20.0` | スリップ時の Yaw 共分散膨張倍率 |
+| `slip_cov_xy_boost` | `20.0` | スリップ時の XY 共分散膨張倍率 |
+| `slip_hold_duration` | `0.5` s | スリップ判定ヒステリシス時間 |
+| `slip_imu_timeout` | `0.2` s | IMU データが古いとみなすタイムアウト |
+
+---
+
+# 9 Pico W 通信プロトコル
+
+`pico_bridge_node.py` ↔ `pico_firmware/src/main.py` が共有する UART プロトコル。
+**プロトコル変更時は必ず両方を同時に更新すること。**
+
+## Jetson → Pico W（コマンド）
+
+```
+L:<value>,R:<value>\n
+S:<pan_deg>,<tilt_deg>\n
+```
+
+| フィールド | 範囲 | 説明 |
+|-----------|------|------|
+| L / R | -100 〜 100 | 左右モーター出力 |
+| S pan | -90 〜 90 | パン角度 (deg) |
+| S tilt | 0 〜 90 | チルト角度 (deg) |
+
+## Pico W → Jetson（テレメトリ）
+
+エンコーダパルス差分・ToF 距離・サーボ状態をシリアルで返送。
+
+**注意:** UART バッファは 4095 バイト。高頻度パブリッシュでオーバーフローのリスクあり。
+詳細: [`docs/serial_deadlock_analysis.md`](serial_deadlock_analysis.md)
+
+---
+
+# 10 安全設計
+
+| レイヤ | ノード | メカニズム | タイムアウト |
+|--------|--------|------------|------------|
+| ROS2 | `pico_bridge_node` | `/cmd_vel` ウォッチドッグ | 500 ms |
+| MCU | Pico W ファームウェア | UART コマンドウォッチドッグ | 500 ms |
+
+どちらのウォッチドッグもタイムアウトで `L:0,R:0` を送信してモーターを停止する。
+ROS と MCU の二重停止機構により、片方が死んでもロボットが暴走しない。
+
+---
+
+# 11 制御周波数
+
+| モジュール | 周波数 |
+|-----------|--------|
+| v4l2_camera | 10 Hz（v4l2-ctl で強制設定）|
+| YOLO 推論 | ~10 Hz |
+| Depth Anything V2 推論 | ~2-3 Hz（処理遅延 300〜500ms）|
+| object_tracking_info_node | カメラ検出に同期 |
+| follow_goal_generator_node | 追従トピックに同期 |
+| pico_bridge_node（cmd_vel → UART） | 最大 10 Hz |
+| Pico W メインループ | ~100 Hz |
+| TF → SLAM | リアルタイム |
+
+---
+
+# 12 TensorRT エンジン
+
+| ファイル | 用途 | 備考 |
+|---------|------|------|
+| `models/yolov8s.engine` | YOLOv8 人検出 | デバイス固有 |
+| `models/depth_anything_v2_metric_hypersim_vits.engine` | Depth Anything V2 深度推定 | デバイス固有 |
+
+`.engine` ファイルは GPU アーキテクチャ固有のため別の Jetson では再生成が必要。
+`force_engine_update: False` で既存エンジンを再利用し初回のみ自動生成する。
+
+---
+
+# 13 参考ドキュメント
+
+| ドキュメント | 内容 |
+|-------------|------|
+| [`docs/serial_deadlock_analysis.md`](serial_deadlock_analysis.md) | シリアル通信バッファ飽和によるデッドロック |
+| [`docs/tof_blocking_analysis.md`](tof_blocking_analysis.md) | ToF ブロッキングによるエンコーダ精度劣化 |
+| [`docs/engineering_decisions.md`](engineering_decisions.md) | LiDAR 配置・オドメトリ選択・Nav2 統合・砲塔設計 |
+| [`docs/observability_detail.md`](observability_detail.md) | 可観測性設計（OTel + Prometheus + Grafana）の詳細 |
+| [`docs/safety_architecture.md`](safety_architecture.md) | 安全設計の詳細 |
