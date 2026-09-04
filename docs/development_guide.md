@@ -20,6 +20,7 @@
 | `toyof_robot_ai_control` | ament_python | 統合制御（追従対象選択・Nav2ゴール生成・LLMエージェント・状態管理） |
 | `toyof_robot_ai_speech` | ament_python | 音声AI（STT/TTS） — `speech_io_node` |
 | `toyof_robot_observability` | ament_python | 可観測性（OTel Counter/Gauge） — `work_event_node` / `metrics_node` |
+| `toyof_robot_subagent_vision` | ament_python | F-3-1: 固定PCカメラでロボットの死角を補うマルチエージェント物体発見ノード（Isaac ROS非依存、x86/WSL2で動作） |
 
 ---
 
@@ -55,11 +56,13 @@ src/
 │
 ├── toyof_robot_vehicle/        # 車両ハードウェア制御（ament_python）
 │   └── toyof_robot_vehicle/
-│       ├── pico_bridge_node.py       # Jetson↔Pico W シリアルブリッジ
-│       ├── wheel_odom_node.py        # エンコーダ→ホイールオドメトリ
+│       ├── pico_bridge_node.py       # Jetson↔Pico W シリアルブリッジ・cmd_velゲート(GUARD)
+│       ├── wheel_odom_node.py        # エンコーダ→ホイールオドメトリ（vxのみ、N21-3）
+│       ├── laser_odom_node.py        # 並進限定レーザーオドメトリ（N24-68、既定は起動しない）
 │       ├── turret_tracker_node.py    # PIDカメラ砲塔制御
 │       ├── motor_driver_node.py      # モーター直接制御（旧実装）
 │       ├── pico_stub_node.py         # Picoスタブ（ハードウェアなし確認用）
+│       ├── imu_sim_node.py           # （simのみ）IMU代替
 │       ├── imu_yaw_aligner_node.py   # IMUヨー補正
 │       ├── scan_filter_node.py       # LiDARフィルタ（車体除外 + 追従対象除外）
 │       └── scan_filter_logic.py      # フィルタロジック（ROS2非依存・pytest対象）
@@ -84,8 +87,12 @@ src/
 │       ├── gvd_explorer_strategy.py           # GVD 探索戦略
 │       ├── explorer_factory.py                # 探索戦略ファクトリ
 │       ├── explorer_interface.py              # 探索インタフェース定義
-│       ├── map_harden_node.py                 # 壁の隙間の未知セルを占有化して再発行（N24-54）
-│       └── map_harden_logic.py                # 硬化ロジック（ROS2非依存・汎用）
+│       ├── map_harden_node.py                 # 壁の隙間の未知セルを占有化/ソフトコスト化して再発行（N24-54/55）
+│       ├── map_harden_logic.py                # 硬化ロジック（ROS2非依存・汎用）
+│       ├── corridor_width_monitor_node.py     # 通路幅推定・NARROW/WIDEプロファイル切替（N22-5/N24-30）
+│       ├── corridor_width_logic.py            # 通路幅判定ロジック（ROS2非依存）
+│       ├── clearance_logic.py                 # robot_safety_clearance_m からの離隔導出（N23-1）
+│       └── nudge_safety_logic.py               # GATE_THROUGH/ノッジの前方安全確認（N24-54c）
 │
 ├── toyof_robot_localization/   # AprilTag 自己位置推定（ament_python）
 │   └── toyof_robot_localization/
@@ -118,6 +125,11 @@ src/
 │   └── toyof_robot_observability/
 │       ├── work_event_node.py       # 軸1: 仕事量・トリガーイベント収集（OTel Counter）
 │       └── metrics_node.py          # 軸2: OS / ROS 2 負荷メトリクス収集（vmstat・tegrastats）
+│
+├── toyof_robot_subagent_vision/  # F-3-1: 固定PCカメラの死角補完（ament_python、Isaac ROS非依存）
+│   └── toyof_robot_subagent_vision/
+│       ├── subagent_vision_node.py    # YOLO-World(CPU) → AprilTag較正の床面ホモグラフィでmap(x,y)投影 → /fleet/object_found
+│       └── subagent_vision_logic.py   # 較正・投影ロジック（ROS2非依存）
 │
 ├── image_pipeline/             # ROS2 image_pipeline（外部）
 └── isaac_ros_compression/      # Isaac ROS画像圧縮（外部）

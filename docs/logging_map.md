@@ -99,6 +99,7 @@ KICK 39件があり、**N23-5 のスリップ棄却も3件発火していた**�
 | `metrics_node` | 可観測性: tegrastats/vmstat/トピックレート→OTel | `toyof_robot_observability` | `[latency]` `OTel` | SUB `object_tracking/info` ほか |
 | `pico_stub_node` | （sim のみ）Pico の代替。GUARD は実機と同一ロジック | `toyof_robot_vehicle` | `[GUARD]` `[PicoStub]` | 実機の `pico_bridge_node` と同じ |
 | `imu_sim_node` | （sim のみ）IMU 代替 | `toyof_robot_vehicle` | `[imu_sim]` | PUB `imu/data_raw` |
+| `laser_odom_node`（N24-68、既定は起動しない） | 並進限定レーザーオドメトリ。EKF未接続・観測専用 | `toyof_robot_vehicle` | `[laser_odom]` | SUB `scan_target_filtered`, `imu/data_aligned`, `wheel_odom` / PUB `laser_odom`, `laser_odom/debug` |
 
 > カメラ系（`camera_perception.launch.py`: `v4l2_camera` / `RectifyNode` /
 > `ImageFormatConverterNode`）も第1層から起動されうるが、**AI頭脳層が自前で起動し直す経路もある**
@@ -116,6 +117,7 @@ KICK 39件があり、**N23-5 のスリップ棄却も3件発火していた**�
 | `amcl` | 既存マップでの自己位置推定 | `nav2_amcl` | `[amcl]` / PUB `amcl_pose` |
 | `async_slam_toolbox_node` | SLAM（地図生成・posegraph） | `slam_toolbox` | `slam_toolbox` |
 | `corridor_width_monitor_node` | 通路幅を推定し NARROW/WIDE プロファイルを注入 | `toyof_robot_navigation` | `[corridor_width]` |
+| `map_harden_node`（N24-54/55/57/59） | `/map` の狭所未知セルを占有化 or ソフトコスト化し `/map_hardened` を発行。costmap は `map_harden:=false` で `/map` に戻せる | `toyof_robot_navigation` | `[map_harden]` |
 | `lifecycle_manager` | Nav2 ノード群の lifecycle 管理 | `nav2_lifecycle_manager` | `[lifecycle_manager]` |
 
 ### 第3層: AI頭脳層 — `ai_core_managers.launch.py` → 起動元のログ

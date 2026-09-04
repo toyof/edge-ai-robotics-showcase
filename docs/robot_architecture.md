@@ -135,14 +135,30 @@ v4l2_camera は生き続けるため DDS ゴーストパブリッシャー問題
 /scan_target_filtered ──→ SLAM Toolbox (Online Async) ──→ /map + TF(map→odom)
 /scan_target_filtered ──→ AMCL ──→ /amcl_pose (Nav モード)
 
-/odometry/filtered + /scan_target_filtered + /map
+/map ──→ map_harden_node ──→ /map_hardened（N24-54/55/57/59。狭所の未知セルを
+                                占有へ変換 or ソフトコスト付与。costmap 側は
+                                map_topic: /map_hardened を参照。
+                                map_harden:=false でロールバック）
+
+/scan_target_filtered ──→ corridor_width_monitor_node ──→ 通路幅プロファイル
+                                切替（NARROW/WIDE、N22-5/N24-30。Nav2パラメータを
+                                動的 set_parameters）
+
+/odometry/filtered + /scan_target_filtered + /map(_hardened)
   → Nav2 (SmacPlanner2D + DWBLocalPlanner) → /cmd_vel
 ```
 
 | mode | 起動内容 |
 |------|----------|
-| `slam` | SLAM Toolbox による地図作成 |
+| `slam` | SLAM Toolbox による地図作成（+ `mapping_lifecycle_node` によるGVD/Frontier自律探索、下記） |
 | `nav`  | AMCL による自己位置推定 + ナビゲーション |
+
+**GVD/Frontier 自律探索・人追従ロストリカバリ（`mapping_lifecycle_node`, `toyof_robot_navigation`）**:
+mapping モードの地図拡張、および人追従ロスト時の Tier2 探索（→ CLAUDE.md §6.3）の両方を
+`GvdExplorer` 共有クラスが担う。GVD（一般化ボロノイ図）の骨格からフロンティア/ゲートを検出し、
+GATE_THROUGH（2レグ駆動）・エリアcommit/退役・スタック脱出などの状態機械で探索を進める。
+内部ロジックの詳細（パラメータ・状態遷移・ロールバック手段）→ `docs/mode_details.md`、
+CLAUDE.md §6.4。
 
 ### Nav2 パラメータファイル
 
@@ -335,48 +351,65 @@ y_base = x_turret * math.sin(pan_rad) + y_turret * math.cos(pan_rad)
 
 # 8 センサーフュージョン
 
-```
-wheel_odom_node
-  エンコーダパルス差分 × 速度依存補正係数 → /wheel_odom (x, y, yaw)
+**Issue-21 / N21-2（2026-08-08）でヨー源を車輪からジャイロへ移した（gyro-odometry）。**
+`wheel_odom_node` はもう姿勢（x/y/yaw）を積分・出力しない。EKF へは
+「並進＝wheel_odom の vx のみ／回転＝IMU の vyaw のみ」を測定として渡し、
+フィルタ側に積分させる（大域補正は map→odom＝AMCL/SLAM の仕事、REP-105の役割分担）。
 
-EKF (robot_localization)
-  /wheel_odom  (x, y, yaw)
-  /imu/data_aligned (yaw, vyaw)
+```
+wheel_odom_node (N21-3, 2スカラーへ減量)
+  /pico/rev_* (エンコーダ生値) → dist_scale補正 → /wheel_odom
+  ※ x/y/yaw は出力しない。pose は UNKNOWN_COV=1e6 で「値が無い」と宣言する
+     （0を黙って出すと下流が原点と読む＝REP-105違反）
+
+EKF (robot_localization, ekf.yaml)
+  /wheel_odom       — vx のみ使用（imu0_differential: false, pose は全 false）
+  /imu/data_aligned — vyaw のみ使用
   → /odometry/filtered → Nav2
+
+laser_odom_node（N24-68, toyof_robot_vehicle。既定では起動しない）
+  並進限定レーザーオドメトリ。回転Δθはジャイロから既知として与え、
+  scan-to-scanを並進2自由度の格子探索へ縮退。EKFへは未接続（観測専用、N24-68c待ち）。
+  wheel_odomのスリップ検知（下記）の第3軸として利用。
+  起動: hardware_bringup.launch.py の laser_odom:=true
 ```
 
-### 速度依存補正（wheel_odom.yaml 抜粋）
+### wheel_odom の距離スケール補正（wheel_odom.yaml 抜粋、N21-3）
 
-4WD 構成の滑り補正を実測キャリブレーションで求めた係数で実施。
-**8つのスケール係数はドライブトレインごとの実測値。別のロボットにそのままコピーしないこと。**
+エンコーダ counts→m の系統誤差を吸収するスカラーを速度で2点blendする。
+`effective_tread` はスリップ検知でジャイロと比較するためだけに使い、姿勢には使わない。
+**実測値はドライブトレインごとの校正値。別のロボットにそのままコピーしないこと。**
 
 ```yaml
-enable_speed_scaling: true
-v_scale_low: 0.11        # 低速閾値 (m/s)
-v_scale_high: 0.36       # 高速閾値 (m/s)
-dist_scale_low: 1.156    # 低速時の距離補正
-dist_scale_high: 1.462   # 高速時の距離補正
-yaw_scale_low: 0.505     # 低速時の旋回補正
-yaw_scale_high: 0.800    # 高速時の旋回補正
+v_scale_low: 0.10
+v_scale_high: 0.30
+dist_scale_low: 0.988
+dist_scale_high: 1.144
+effective_tread: 0.523
+cov_vx: 0.001
 ```
 
-### スリップ検出・修復（W-1, 2026-06-26 追加 / W-1-4・W-1-6 で改修）
+### スリップ検出・修復
 
-スリップ判定中は **回転のみ** `self.theta` を IMU 絶対 yaw 差分で置換し、幻の回転積分を防ぐ。
-判定入力は判定非依存の校正済みホイール角速度（旧 `w_ema` 入力は自己発振バグの原因だったため廃止）。
-**並進は抑制しない**（W-1-6）: 判定はスキッドステアの正常旋回でも誤発火し、並進を削ると
-旋回→前進のたびに前進距離が過少カウントされてオドムが崩れるため。スリップ中の並進過大は
-cov ブーストで EKF に down-weight させる。
+車輪空転（壁ドン空転＝ホイールは回るが車体は静止）を独立した2〜3軸で検知し、
+検知したらその軸の測定を棄却（EMA も更新しない）。ヨーではなく**並進(vx)を汚す**（N23-5）。
+
+| 軸 | 判定 | 対応 |
+|---|---|---|
+| 回転（ホイール vs IMU） | 校正済みホイール角速度が `slip_w_wheel_high`(0.40 rad/s) 超過 かつ IMU角速度が `slip_w_imu_low`(0.15) 未満 | 回転のみ `self.theta` を IMU絶対yaw差分で置換 |
+| 並進（報告速度） | 報告速度が `slip_reject_speed_mps`(0.15 m/s＝指令上限の1.5倍) 超過 | vx を棄却・EMA凍結（N23-5） |
+| 並進（wheel vs laser_odom、既定無効） | `slip_translation_enable: true` かつ wheel(`slip_v_wheel_high` 0.15) と laser_odom(`slip_v_laser_low` 0.05) が乖離 | vx を棄却（N24-68d。IMU可否と無関係に評価できる独立軸。laser_odom未起動時はフェイルオープンで無害） |
 
 | パラメータ | デフォルト | 意味 |
 |---|---|---|
 | `slip_detect_enable` | `true` | スリップ検出の有効/無効 |
-| `slip_w_wheel_high` | `0.40` rad/s | 校正済みホイール角速度がこれを超え、かつ… |
-| `slip_w_imu_low` | `0.15` rad/s | …IMU 角速度がこれ未満なら空転と判定（回転のみ IMU 置換） |
-| `slip_cov_yaw_boost` | `20.0` | スリップ時の Yaw 共分散膨張倍率 |
-| `slip_cov_xy_boost` | `20.0` | スリップ時の XY 共分散膨張倍率 |
+| `slip_cov_vx_boost` | `20.0` | スリップ時の vx 共分散膨張倍率 |
 | `slip_hold_duration` | `0.5` s | スリップ判定ヒステリシス時間 |
 | `slip_imu_timeout` | `0.2` s | IMU データが古いとみなすタイムアウト |
+| `slip_reject_speed_mps` | `0.15` m/s | 並進棄却の閾値（`0.0` でロールバック） |
+| `slip_translation_enable` | `false`（`wheel_odom.yaml` で `true` に上書き） | laser_odom併用の第3軸を有効化 |
+
+詳細 → CLAUDE.md §6.9、`docs/design_notes.md` N21-2/N21-3/N23-5/N24-68。
 
 ---
 

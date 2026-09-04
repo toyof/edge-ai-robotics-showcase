@@ -214,6 +214,12 @@ on_cleanup で SLAM サブプロセスを SIGINT → SIGKILL で終了
 
 ノードは `GridObservation`（マップ・現在位置）を戦略に渡し、`ExploreDecision`（ゴール座標・スキャン指示）を受け取って駆動するだけ。選定・退役・完了判定はすべてアダプタ内部に閉じている。
 
+**探索が見る地図と Nav2 が見る地図は別系統（N24-54）**: `mapping_lifecycle_node` の探索ロジック
+（GVD/Frontier）は生の `/map` をそのまま解析する（未知セルへゴールを置く挙動は不変）。
+一方 Nav2 の costmap（衝突判定・経路計画）は `map_harden_node` が `/map` から「車体幅より狭い
+隙間に挟まれた未知セル」だけを占有化 or ソフトコスト化して発行する `/map_hardened` を参照する
+（`autonomy.launch.py` の `map_harden:=false` でロールバック、詳細 → CLAUDE.md §6.4 N24-54/55）。
+
 ---
 
 ### Lifecycle 状態遷移
