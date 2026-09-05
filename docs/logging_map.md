@@ -117,7 +117,7 @@ KICK 39件があり、**N23-5 のスリップ棄却も3件発火していた**�
 | `amcl` | 既存マップでの自己位置推定 | `nav2_amcl` | `[amcl]` / PUB `amcl_pose` |
 | `async_slam_toolbox_node` | SLAM（地図生成・posegraph） | `slam_toolbox` | `slam_toolbox` |
 | `corridor_width_monitor_node` | 通路幅を推定し NARROW/WIDE プロファイルを注入 | `toyof_robot_navigation` | `[corridor_width]` |
-| `map_harden_node`（N24-54/55/57/59） | `/map` の狭所未知セルを占有化 or ソフトコスト化し `/map_hardened` を発行。costmap は `map_harden:=false` で `/map` に戻せる | `toyof_robot_navigation` | `[map_harden]` |
+| `map_harden_node`（N24-54/55/57/59/60） | `/map` の狭所未知セルを占有化 or ソフトコスト化し `/map_hardened` を発行。costmap は `map_harden:=false` で `/map` に戻せる | `toyof_robot_navigation` | `[map_harden]` |
 | `lifecycle_manager` | Nav2 ノード群の lifecycle 管理 | `nav2_lifecycle_manager` | `[lifecycle_manager]` |
 
 ### 第3層: AI頭脳層 — `ai_core_managers.launch.py` → 起動元のログ

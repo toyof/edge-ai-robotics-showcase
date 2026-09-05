@@ -116,7 +116,28 @@ one based on a moving average over the last 15 actions. The state machine lives
 in a ROS2-free pure-logic module (`follow_recovery_logic.py`), so its regression
 tests run under pytest without the robot.
 
-→ [docs/mode_details.md](docs/mode_details.md)
+```mermaid
+stateDiagram-v2
+    [*] --> FOLLOWING
+    FOLLOWING --> LOST: detection lost
+    LOST --> LOOK_PAUSE: look around (3s)
+    LOOK_PAUSE --> FOLLOWING: re-detected
+    LOOK_PAUSE --> TIER1: look-around failed
+    TIER1: Tier 1 - predict ahead
+    TIER1 --> FOLLOWING: re-detected
+    TIER1 --> TIER2: timeout (8s)
+    TIER2: Tier 2 - autonomous search
+    TIER2 --> FOLLOWING: re-detected
+    TIER2 --> TIER2: search exhausted, keeps patrolling (never gives up)
+    TIER2 --> GIVEUP: search_giveup_timeout_sec (60s)
+    GIVEUP --> [*]
+```
+
+> Lost-target rate and re-acquisition success rate are not yet measured (see
+> "metrics not yet measured" at the top of this README). The diagram above
+> describes the logic structure, not measured behavior.
+
+→ Full design, all parameters, real-run validation logs → [docs/mode_details.md](docs/mode_details.md)
 
 ### A final safety gate that does not care who issued the command
 
@@ -139,7 +160,11 @@ forbidden** — doing exactly that once left the values out of step and the robo
 broken for 11 days without anyone noticing. A dedicated test now pins that
 invariant mechanically.
 
-→ [docs/safety_architecture.md](docs/safety_architecture.md)
+<p align="center">
+  <img src="docs/images/guard_corridor_vs_sector.png" alt="Sector vs. corridor gate geometry compared" width="80%">
+</p>
+
+→ Geometry-flaw detail, sequence diagrams, the 3-tier gate design → [docs/safety_architecture.md](docs/safety_architecture.md)
 
 ### Exclusive LLM/YOLO scheduling under an 8 GB memory budget
 
@@ -147,7 +172,11 @@ The Jetson Orin Nano's 8 GB shared memory can't hold the LLM (~3 GB) and
 the YOLO pipeline (~2 GB) at the same time. Designed and implemented
 exclusive memory management using ROS2 Lifecycle + OS drop_caches.
 
-→ [docs/engineering_decisions.md](docs/engineering_decisions.md)
+<p align="center">
+  <img src="docs/images/ai_mode_memory_budget.png" alt="Estimated memory usage under LLM/YOLO exclusive scheduling" width="70%">
+</p>
+
+→ Lifecycle transition sequence diagram in detail → [docs/engineering_decisions.md](docs/engineering_decisions.md) (Issue-06)
 
 ### Diagnosing and fixing a serial deadlock
 
@@ -155,14 +184,64 @@ The UART link between the Jetson and the Pico intermittently hung.
 Root-caused to the kernel's serial buffer limit (4095 bytes) being hit;
 resolved by redesigning the send/receive protocol.
 
-→ [docs/serial_deadlock_analysis.md](docs/serial_deadlock_analysis.md)
+<p align="center">
+  <img src="docs/images/serial_buffer_backlog.png" alt="Measured serial RX buffer backlog over time" width="75%">
+</p>
+
+→ Full measured logs, communication sequence diagram → [docs/serial_deadlock_analysis.md](docs/serial_deadlock_analysis.md)
 
 ### Diagnosing and fixing encoder-accuracy loss from ToF I2C blocking
 
 ToF sensor I2C reads were blocking the MCU's main loop, causing dropped
 encoder interrupts. Fixed by separating the tasks.
 
+<p align="center">
+  <img src="docs/images/tof_blocking_timeline.png" alt="Conceptual timeline of main-loop delay from ToF I2C blocking" width="80%">
+</p>
+
 → [docs/tof_blocking_analysis.md](docs/tof_blocking_analysis.md)
+
+### Resolving LiDAR obstacle ghosts via reflection-intensity filtering
+
+Initially assumed a floor-level step was the cause and tried a distance-based
+fix, but an on-site check found no physical step at all. Directly inspecting
+the reflection intensity revealed the ghost readings were an order of
+magnitude weaker than real reflections (intensity 2–3 vs. 7–60+), pointing to
+specular multipath reflection off the floor. Confirmed the hypothesis with
+measured data and fixed it with an intensity filter instead.
+
+<p align="center">
+  <img src="docs/images/lidar_intensity_compare.png" alt="Reflection intensity: ghost direction vs. real reflection" width="60%">
+</p>
+
+→ Scan geometry diagram, multipath concept diagram, full threshold search → [docs/lidar_intensity_ghost_analysis.md](docs/lidar_intensity_ghost_analysis.md)
+
+### Calibrated a laser odometry source, then deliberately kept it out of the EKF
+
+To compensate for wheel slip corrupting the robot's only translational
+velocity signal (vx), I added a `laser_odom_node` that estimates translation
+independently from LiDAR scans. Yaw is injected as a known quantity from the
+gyroscope, reducing the search to two translational degrees of freedom — this
+sidesteps the aperture problem that destabilizes conventional ICP-style laser
+odometry, which solves rotation and translation simultaneously.
+
+Offline calibration against ~1M lines of logs from three real-run sessions
+gave a result that wasn't a simple pass/fail. The declared covariance turned
+out to be an **~3x over-conservative** estimate of the true error (`std(z)
+= 0.33` against an ideal of 1.0) — safe, but also nearly inert: at normal
+driving speeds its weight share in the EKF fusion would be a median 18–22%,
+meaning it would barely move the fused estimate. The one regime where it
+would matter — during slip, where its weight share jumps to 81–93% — was
+already covered by a **separate slip-detection axis** that zeroes the wheel
+velocity outright. Feeding it into the EKF as well would let one sensor act
+as both the evidence for rejecting a measurement and the measurement that
+replaces it — a single point of failure, independent of accuracy.
+
+<p align="center">
+  <img src="docs/images/ekf_weight_occupancy.png" alt="laser_odom weight share if fused into the EKF" width="65%">
+</p>
+
+→ z-distribution histogram, full calibration process → [docs/engineering_decisions.md](docs/engineering_decisions.md) (Issue-10)
 
 ### Edge-LLM command classification accuracy — crosslingual prompting
 
@@ -172,6 +251,10 @@ keeping user input in Japanese (crosslingual prompting) eliminated the
 misclassification entirely and cut LLM decision latency from **~15 s to
 ~0.8 s**. On small edge LLMs, an English prompt removes semantic
 interference from Japanese.
+
+<p align="center">
+  <img src="docs/images/llm_crosslingual_latency.png" alt="LLM decision latency: Japanese prompt vs. English prompt" width="55%">
+</p>
 
 → [docs/engineering_decisions.md](docs/engineering_decisions.md)
 
@@ -340,6 +423,7 @@ operational experience into robotics.
 | [docs/observability_detail.md](docs/observability_detail.md) | OTel stack layout, file placement |
 | [docs/serial_deadlock_analysis.md](docs/serial_deadlock_analysis.md) | UART deadlock investigation log |
 | [docs/tof_blocking_analysis.md](docs/tof_blocking_analysis.md) | I2C blocking investigation log |
+| [docs/lidar_intensity_ghost_analysis.md](docs/lidar_intensity_ghost_analysis.md) | LiDAR obstacle-ghost investigation log (intensity filter) |
 | [docs/engineering_decisions.md](docs/engineering_decisions.md) | Design decision log |
 | [docs/robot_architecture.md](docs/robot_architecture.md) | Robot architecture detail |
 | [docs/mode_details.md](docs/mode_details.md) | Internal logic, boot sequence, and parameters for each AI mode |

@@ -104,24 +104,37 @@ Pico W ──→ pico_bridge_node ──→ /pico/rev_*                     │
 
 ## センサーフュージョン
 
+**並進はホイールエンコーダ・回転はジャイロの完全分業**（Issue-21 / N21-2）。
+IMU は `imu0_differential:false` の下では絶対方位を供給できない仕様のため、
+姿勢を「測定」として融合するのをやめ、速度だけを入れて EKF に積分させる設計へ
+切り替えた（詳細な構造欠陥の分析 → `docs/engineering_decisions.md` Issue-02
+その後の変化、CLAUDE.md §6.9）。
+
 ```
-Wheel Odometry (x, y, yaw)  ──┐
-                               ├──→ EKF (robot_localization) ──→ /odometry/filtered
-IMU (yaw, vyaw)              ──┘
+Wheel Odometry (vx のみ)   ──┐
+                              ├──→ EKF (robot_localization) ──→ /odometry/filtered
+IMU (vyaw のみ)             ──┘
 ```
 
-### 速度依存補正
+pose (x, y, yaw) はどちらのソースも融合しない。ホイール側の pose 出力・TF配信は
+撤去済みで、値を持たないことは `UNKNOWN_COV=1e6` で明示的に宣言する
+（0 を黙って出すと下流が「原点」と読んでしまう＝REP-105違反）。
 
-4WD 構成による滑りを補正するため、実測キャリブレーションに基づく速度依存補正を実装。
+### 速度依存の距離補正
+
+4WD 構成による滑りを補正するため、速度帯に応じて2点を線形補間する
+（`blend_dist_scale()`、N21-3b）。
 
 ```yaml
-# wheel_odom.yaml
-enable_speed_scaling: true
-dist_scale_low: 1.156    # 低速時の距離補正係数
-dist_scale_high: 1.462   # 高速時の距離補正係数
-yaw_scale_low: 0.505     # 低速時の旋回補正係数
-yaw_scale_high: 0.800    # 高速時の旋回補正係数
+# wheel_odom.yaml（抜粋）
+v_scale_low: 0.10        # 低速閾値 (m/s)
+v_scale_high: 0.30       # 高速閾値 (m/s)
+dist_scale_low: 0.988    # 低速時の距離補正係数
+dist_scale_high: 1.144   # 高速時の距離補正係数
+effective_tread: 0.523   # 車輪差→角速度（スリップ検知がジャイロと比較する専用、姿勢には使わない）
 ```
+
+旋回方向の補正（旧 `yaw_scale_low/high`）は姿勢を積分しなくなったため撤去済み。
 
 ---
 

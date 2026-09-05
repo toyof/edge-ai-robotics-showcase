@@ -82,6 +82,13 @@ Jetson Orin Nano（ROS 2）からRaspberry Pi Pico（MicroPython）へシリア�
 > 
 > ※ $2^{12}-1 = 4095$ バイトという数値から、Linuxカーネルのシリアルバッファ上限に達していることが判明。
 
+上記ログの一部（省略区間を除く実測値）をプロットすると、バッファ滞留が単調に増加し
+4095バイトで頭打ちになる様子が視覚的に確認できる。
+
+<p align="center">
+  <img src="images/serial_buffer_backlog.png" alt="シリアル通信RXバッファ滞留の実測推移" width="80%">
+</p>
+
 ## 4. 検証 (Validation)
 
 事象発生時にOSバッファを強制的に空にする「バッファクリーナー」を別プロセスで実行し、挙動の変化を観察。

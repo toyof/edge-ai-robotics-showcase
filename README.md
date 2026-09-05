@@ -104,7 +104,26 @@ ReID（人物再同定）を持たない検出器では、一度見失った時�
 状態機械は ROS2 非依存の純ロジック（`follow_recovery_logic.py`）に切り出してあり、
 実機なしで pytest による回帰テストを回せる。
 
-→ [docs/mode_details.md](docs/mode_details.md)
+```mermaid
+stateDiagram-v2
+    [*] --> FOLLOWING
+    FOLLOWING --> LOST: 検出途絶
+    LOST --> LOOK_PAUSE: 見渡し(3秒)
+    LOOK_PAUSE --> FOLLOWING: 再検出
+    LOOK_PAUSE --> TIER1: 見渡し失敗
+    TIER1: Tier1 軌跡先回り
+    TIER1 --> FOLLOWING: 再検出
+    TIER1 --> TIER2: タイムアウト(8s)
+    TIER2: Tier2 自律探索
+    TIER2 --> FOLLOWING: 再検出
+    TIER2 --> TIER2: 探索完了でも巡回継続(諦めない)
+    TIER2 --> GIVEUP: search_giveup_timeout_sec(60s)
+    GIVEUP --> [*]
+```
+
+> 追従ロスト率・再捕捉成功率は現時点で未計測（本README冒頭「未計測の指標」参照）。上図はロジック構造の設計図。
+
+→ 詳細設計・全パラメータ・実機検証ログ → [docs/mode_details.md](docs/mode_details.md)
 
 ### 発生源を問わない最終安全ゲート
 
@@ -123,7 +142,11 @@ publisher 側の変更はゼロで、1トピックを購読するだけで全経
 以前それをやって値がずれ、11日間気付かずに壊れていたためで、この不変条件は専用テストが
 機械的に固定している。
 
-→ [docs/safety_architecture.md](docs/safety_architecture.md)
+<p align="center">
+  <img src="docs/images/guard_corridor_vs_sector.png" alt="扇形方式とコリドー方式の幾何比較" width="80%">
+</p>
+
+→ 幾何欠陥の詳細・シーケンス図・3層ゲートの設計 → [docs/safety_architecture.md](docs/safety_architecture.md)
 
 ### 8GBメモリ制約下でのLLM/YOLO排他制御
 
@@ -131,7 +154,11 @@ Jetson Orin Nanoの8GB共有メモリでLLM（~3GB）とYOLOパイプライン�
 同時に載せられない問題に対し、ROS2 Lifecycle + OS drop_cachesによる
 排他的メモリ管理を設計・実装した。
 
-→ [docs/engineering_decisions.md](docs/engineering_decisions.md)
+<p align="center">
+  <img src="docs/images/ai_mode_memory_budget.png" alt="LLM/YOLO排他制御のメモリ使用量概算" width="70%">
+</p>
+
+→ Lifecycle遷移シーケンス図の詳細 → [docs/engineering_decisions.md](docs/engineering_decisions.md) (Issue-06)
 
 ### シリアル通信デッドロックの特定と解消
 
@@ -139,14 +166,58 @@ Jetson ↔ Pico間のUART通信が不定期にハングする事象が発生。
 カーネルのシリアルバッファ上限（4095 bytes）への到達が原因と特定し、
 送受信プロトコルの再設計で解消した。
 
-→ [docs/serial_deadlock_analysis.md](docs/serial_deadlock_analysis.md)
+<p align="center">
+  <img src="docs/images/serial_buffer_backlog.png" alt="シリアル通信RXバッファ滞留の実測推移" width="75%">
+</p>
+
+→ 実測ログ全文・通信シーケンス図 → [docs/serial_deadlock_analysis.md](docs/serial_deadlock_analysis.md)
 
 ### ToF I2Cブロッキングによるエンコーダ精度劣化の特定と解消
 
 ToFセンサのI2C読み取りがMCUのメインループをブロックし、
 エンコーダ割り込みの取りこぼしが発生。タスク分離により解消。
 
+<p align="center">
+  <img src="docs/images/tof_blocking_timeline.png" alt="ToF I2Cブロッキングによるメインループ遅延の概念図" width="80%">
+</p>
+
 → [docs/tof_blocking_analysis.md](docs/tof_blocking_analysis.md)
+
+### LiDAR強度(intensity)による障害物ゴーストの解消
+
+床の段差が原因だと仮定して距離ベースの対策を試したが、現地確認で物理的な段差は
+存在しないと判明。反射強度を直接調べたところ、ゴースト方向は本物の反射より
+桁違いに弱い値（強度2〜3 vs 7〜60台）であることを発見し、intensityフィルタで解消。
+床面の鏡面反射による多重経路(マルチパス)が原因という仮説を実測データで裏付けた。
+
+<p align="center">
+  <img src="docs/images/lidar_intensity_compare.png" alt="ゴースト方向vs本物反射の反射強度比較" width="60%">
+</p>
+
+→ スキャンジオメトリ図・多重経路概念図・閾値探索の全過程 → [docs/lidar_intensity_ghost_analysis.md](docs/lidar_intensity_ghost_analysis.md)
+
+### レーザーオドメトリを較正した結果、あえてEKFへ統合しなかった判断
+
+車輪スリップ時に汚染される並進速度（vx）を補うため、LiDARスキャンから独立に
+並進を推定する `laser_odom_node` を新設した。回転はジャイロから既知として
+外部注入し、探索を並進2自由度だけに縮退させることで、一般的なICP系レーザー
+オドメトリが抱える「回転と並進の同時推定による不安定化（アパーチャ問題）」を
+そもそも避ける設計にした。
+
+実機3セッション・約100万行のログをオフラインで較正した結果は単純な合否では
+なかった。申告した共分散は実誤差の**約3倍の過大申告**（`std(z)=0.33`、理想1.0）
+で安全側ではあったが、EKFへ統合した場合の平常時の重み占有率は中央値18〜22%に
+留まり、**入れてもほとんど何も変わらない**ことが分かった。意味のある効果が出る
+スリップ時（重み81〜93%）は、車輪の異常を検出して速度を0へ落とす**別のスリップ
+検知の第3軸**として既に回収済みだったため、EKFへの統合はあえて見送った——1つの
+センサが「異常の検出根拠」と「検出後の主測定」を兼ねると単一障害点になるという、
+精度とは別軸の設計判断による。
+
+<p align="center">
+  <img src="docs/images/ekf_weight_occupancy.png" alt="EKF統合を想定した場合のlaser_odom重み占有率" width="65%">
+</p>
+
+→ z分布ヒストグラム・較正の全過程 → [docs/engineering_decisions.md](docs/engineering_decisions.md) (Issue-10)
 
 ### エッジLLMのコマンド分類精度 — Crosslingual Prompting
 
@@ -154,6 +225,10 @@ Qwen2.5 1.5B（日本語プロンプト）では「物体検索開始」が `sta
 日本語入力のまま**英語プロンプト**に切り替えたところ（Crosslingual Prompting）、
 誤分類がゼロになり、LLM 判定時間も **~15s → ~0.8s** に大幅短縮した。
 小規模エッジ LLM では、英語プロンプトが日本語のセマンティック干渉を排除する。
+
+<p align="center">
+  <img src="docs/images/llm_crosslingual_latency.png" alt="日本語プロンプトと英語プロンプトのLLM判定時間比較" width="55%">
+</p>
 
 → [docs/engineering_decisions.md](docs/engineering_decisions.md)
 
@@ -321,6 +396,7 @@ flowchart TB
 | [docs/observability_detail.md](docs/observability_detail.md) | OTelスタック構成、ファイル配置 |
 | [docs/serial_deadlock_analysis.md](docs/serial_deadlock_analysis.md) | UART通信障害の調査記録 |
 | [docs/tof_blocking_analysis.md](docs/tof_blocking_analysis.md) | I2Cブロッキング障害の調査記録 |
+| [docs/lidar_intensity_ghost_analysis.md](docs/lidar_intensity_ghost_analysis.md) | LiDAR障害物ゴースト誤検出の調査記録（intensityフィルタ導入） |
 | [docs/engineering_decisions.md](docs/engineering_decisions.md) | 設計判断の記録 |
 | [docs/robot_architecture.md](docs/robot_architecture.md) | ロボットアーキテクチャ詳細 |
 | [docs/mode_details.md](docs/mode_details.md) | 各AIモードの内部ロジック・起動シーケンス・パラメータ |

@@ -58,7 +58,7 @@ src/
 │   └── toyof_robot_vehicle/
 │       ├── pico_bridge_node.py       # Jetson↔Pico W シリアルブリッジ・cmd_velゲート(GUARD)
 │       ├── wheel_odom_node.py        # エンコーダ→ホイールオドメトリ（vxのみ、N21-3）
-│       ├── laser_odom_node.py        # 並進限定レーザーオドメトリ（N24-68、既定は起動しない）
+│       ├── laser_odom_node.py        # 並進限定レーザーオドメトリ（N24-68、既定 true で起動）
 │       ├── turret_tracker_node.py    # PIDカメラ砲塔制御
 │       ├── motor_driver_node.py      # モーター直接制御（旧実装）
 │       ├── pico_stub_node.py         # Picoスタブ（ハードウェアなし確認用）
@@ -98,7 +98,9 @@ src/
 │   └── toyof_robot_localization/
 │       ├── tag_localization_manager_node.py   # AprilTag 自己位置推定マネージャー
 │       ├── tag_localization_logic.py          # AprilTag ローカライゼーションロジック（ROS2非依存）
-│       └── tag_map_recorder_node.py           # AprilTag マップ記録ノード
+│       ├── tag_map_recorder_node.py           # AprilTag マップ記録ノード
+│       ├── apriltag_servo_node.py             # タグ追尾のための砲塔サーボ制御
+│       └── apriltag_servo_logic.py            # 砲塔サーボ制御ロジック（ROS2非依存）
 │
 ├── toyof_robot_ai_control/     # 統合制御・LLM・AI モード管理（ament_python）
 │   └── toyof_robot_ai_control/

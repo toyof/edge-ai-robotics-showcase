@@ -867,6 +867,37 @@ recovery_mode:=off の場合（変更なし）:
 （Tier1突入時の予測ゴール＝人が向かった先）を `room_bias_x/y` / `patrol_bias_x/y` として渡し、
 「人が向かった予測部屋・地点を優先」して巡回する（T-27-5）。
 
+### リカバリー状態機械（見渡し → Tier1 → Tier2 → 再捕捉）
+
+```mermaid
+stateDiagram-v2
+    [*] --> FOLLOWING
+    FOLLOWING --> LOST: 検出途絶
+    LOST --> LOOK_PAUSE: look_pause_sec(既定3.0s)\n最後に見えた方位へ砲塔掃引
+    LOOK_PAUSE --> FOLLOWING: 見渡し中に再検出
+    LOOK_PAUSE --> TIER1: 見渡し失敗\n(方位がLiDARで塞がれていればスキップ)
+
+    TIER1: Tier1 軌跡先回り
+    TIER1 --> FOLLOWING: 予測ゴール到達中に再検出
+    TIER1 --> TIER2: タイムアウト(既定8s)\nbreadcrumbからの予測が空振り
+
+    TIER2: Tier2 自律探索\n(GVD/Frontier or 部屋巡回)
+    TIER2 --> FOLLOWING: 探索中に再検出
+    TIER2 --> TIER2: is_complete()でも巡回モードへ\n自動切替（諦めない）
+    TIER2 --> GIVEUP: search_giveup_timeout_sec\n(既定60s、唯一の終端)
+
+    GIVEUP --> [*]
+```
+
+「諦めない」（Tier2が探索し尽くしても巡回へ自動切替）と「無限ループしない」
+（`search_giveup_timeout_sec` という単一の終端）を両立させているのがこの状態機械の要点。
+ローカル停滞（半径2.0m以内で新規面積が増えない）とグローバル停滞（直近15アクションの
+移動平均）という独立した2つの停滞判定が `is_complete()` 側の巡回切替を支えるが、
+最終的にループを閉じる条件は上図の `GIVEUP` 一本に集約されている。
+
+> 追従ロスト率・再捕捉成功率などの定量指標は現時点で未計測（README「未計測の指標」参照）。
+> 上図は `follow_recovery_logic.py` のロジック構造を表す設計図であり、実測データに基づく統計ではない。
+
 ### Tier2 探索は「諦めない」（P8-2）
 
 GVD/Frontier が `is_complete()==True`（地図を探索し尽くした）を返しても、Tier2 はそこで

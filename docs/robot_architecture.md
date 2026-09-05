@@ -135,7 +135,7 @@ v4l2_camera は生き続けるため DDS ゴーストパブリッシャー問題
 /scan_target_filtered ──→ SLAM Toolbox (Online Async) ──→ /map + TF(map→odom)
 /scan_target_filtered ──→ AMCL ──→ /amcl_pose (Nav モード)
 
-/map ──→ map_harden_node ──→ /map_hardened（N24-54/55/57/59。狭所の未知セルを
+/map ──→ map_harden_node ──→ /map_hardened（N24-54/55/57/59/60。狭所の未知セルを
                                 占有へ変換 or ソフトコスト付与。costmap 側は
                                 map_topic: /map_hardened を参照。
                                 map_harden:=false でロールバック）
@@ -291,20 +291,24 @@ ai_perception_container へ LoadComposableNodes で動的注入:
   → object_tracking_info_node → /object_tracking/info (PersonTrackingInfo)
         ├──→ follow_goal_generator_node
         │       + /ai/target_spatial (最優先)
-        │       + /pico/tof_m (第2優先)
-        │       + BBox高さ推定 (第3優先)
+        │       + /pico/tof_m (第2優先、use_tof 既定 false)
         │       → NavigateToPose (Nav2) → /cmd_vel
         └──→ turret_tracker_node → /pico/servo_target (PID サーボ制御)
 ```
 
-### 距離推定優先順位
+### 距離推定優先順位（N19-9a）
 
 | 優先度 | ソース | 説明 |
 |--------|--------|------|
-| 1位 | AI深度 (`/ai/target_spatial`) | Depth Anything V2 メトリック深度（300〜500ms 遅延） |
-| 2位 | ToF (`/pico/tof_m`) | 砲塔搭載 VL53L0X（ターゲット方向のみ） |
-| 3位 | BBox高さ推定 | バウンディングボックスサイズから逆算 |
-| 4位 | 固定値 2m | フォールバック |
+| 1位 | AI深度 (`/ai/target_spatial`) | Depth Anything V2 メトリック深度。`ai_depth_min_m` 未満の生値は信頼しない |
+| 2位 | ToF (`/pico/tof_m`) | 砲塔搭載 VL53L0X（ターゲット方向のみ、`use_tof` 既定 **false**） |
+| 近距離クランプ | AI深度が `ai_depth_min_m` 未満・ToF も無効 | `ai_depth_min_m` にクランプした値を返す（正確な距離は不明だが「非常に近い」ことは確実） |
+| フォールバック | いずれも無効 | `None` を返し呼び出し側で安全に停止させる |
+
+**BBox高さ推定・固定値2mフォールバックはいずれも撤去済み**（2026-07-05）。前者は
+対象物体のサイズが多様で「実物の高さは一定」という前提が成立せず大幅な過大推定を
+起こし（実測: 1.9m先のぬいぐるみを15.25mと誤推定）、後者は対象を認識していても
+常に2m先を狙って近づかない不具合の原因だった。
 
 ### サーボ角度考慮
 
@@ -367,11 +371,13 @@ EKF (robot_localization, ekf.yaml)
   /imu/data_aligned — vyaw のみ使用
   → /odometry/filtered → Nav2
 
-laser_odom_node（N24-68, toyof_robot_vehicle。既定では起動しない）
+laser_odom_node（N24-68, toyof_robot_vehicle。既定 true で起動する）
   並進限定レーザーオドメトリ。回転Δθはジャイロから既知として与え、
-  scan-to-scanを並進2自由度の格子探索へ縮退。EKFへは未接続（観測専用、N24-68c待ち）。
-  wheel_odomのスリップ検知（下記）の第3軸として利用。
-  起動: hardware_bringup.launch.py の laser_odom:=true
+  scan-to-scanを並進2自由度の格子探索へ縮退。EKFへは繋がない（N24-68cで確定・観測専用）。
+  wheel_odomのスリップ検知（下記）の第3軸として利用。未起動時は当該軸がフェイルオープンで無害。
+  ロールバック: hardware_bringup.launch.py の laser_odom:=false
+  （2026-09-05、起動していないとスリップ検知translation軸が証言者を持たず常に無効になるため
+  既定falseから変更。代償はCPU 1コア約31%＝全体約5%を常時負担）
 ```
 
 ### wheel_odom の距離スケール補正（wheel_odom.yaml 抜粋、N21-3）

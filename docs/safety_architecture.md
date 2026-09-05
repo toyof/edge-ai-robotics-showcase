@@ -57,12 +57,30 @@ watchdog_sec = 0.5
 cmd_vel_guard_use_corridor          = true
 cmd_vel_guard_corridor_half_width_m  = 0.15   # footprint半幅
 cmd_vel_guard_corridor_front_offset_m = 0.035
-cmd_vel_guard_stop_clearance_m      = 0.215   # 旧 stop_distance_m 0.25 と等価
-cmd_vel_guard_slow_clearance_m      = 0.415   # 旧 slow相当と等価
 cmd_vel_guard_corridor_min_points   = 2       # 単発ノイズ点での急停止防止
 cmd_vel_guard_corridor_rear_offset_m = 0.295
 cmd_vel_guard_scan_timeout_sec = 1.0
 ```
+
+**N23-1（2026-08-27）: stop/slow clearance は固定パラメータではなく、マスター
+`robot_safety_clearance_m`（`robot_geometry.yaml`、現在 **0.24**、base_link中心基準）
+から実行時に導出する。**
+
+```
+stop_clearance_m = derive_clearance(robot_safety_clearance_m,
+                                     cmd_vel_guard_stop_delta_m=0.0,
+                                     robot_footprint_front_m=0.165)
+                  = 0.24 + 0.0 − 0.165 = 0.075 m
+
+slow_clearance_m = derive_clearance(robot_safety_clearance_m,
+                                     cmd_vel_guard_slow_delta_m=0.10,
+                                     robot_footprint_front_m=0.165)
+                  = 0.24 + 0.10 − 0.165 = 0.175 m
+```
+
+**数値をコピーして揃えるのは禁止**（以前それをやって値がずれ、11日間気付かずに
+壊れていた実例がある）。壁との距離をどこかで変えたくなったらマスター1本だけを
+変更する。不変条件は `test_clearance_ladder.py` が機械的に固定している。
 
 処理
 
@@ -93,6 +111,31 @@ tag_localization_manager ＋ Nav2 velocity_smoother ＋ teleop）あり、個々
 `evaluate()`（コーン方式）は無変更で残置（ロールバック用）。ロジックは
 `cmd_vel_guard_logic.py`（ROS2非依存、pytest）。配線は publisher 側の変更ゼロで、
 `pico_bridge_node` が1トピック購読するだけ。詳細 → `todo/navigation.md` N13-8b。
+
+<p align="center">
+  <img src="images/guard_corridor_vs_sector.png" alt="扇形方式とコリドー方式の幾何比較" width="85%">
+</p>
+
+`/cmd_vel` を publish する9箇所すべてが同じゲートを一度だけ通る構造は、次のシーケンス図の通り。
+
+```mermaid
+sequenceDiagram
+    participant Pub as cmd_vel publisher (9箇所のいずれか)
+    participant Bridge as pico_bridge_node.cb_cmd_vel
+    participant Scan as /scan_body_filtered
+    participant Motor as Picoモータ制御
+
+    Pub->>Bridge: cmd_vel(linear.x > 0)
+    Bridge->>Scan: 直近スキャンを参照
+    alt コリドー内に障害物なし
+        Bridge->>Motor: そのまま前進を通す
+    else 減速帯（0.075〜0.175m）
+        Bridge->>Motor: 速度を絞って通す（blocked=False）
+    else 停止帯（<0.075m）
+        Bridge->>Motor: linear.x = 0 に強制
+        Note over Bridge: 後退・その場旋回は常に通す
+    end
+```
 
 ## 3.2 GUARD の持続ブロック検知（N13-4）
 
@@ -125,6 +168,14 @@ wheel_odom誤差蓄積→AMCLパーティクルフィルタ発散→Nav2連続RE
 安全停止の順に切り替える（`escape_rotation_block_sec` 既定1.0秒）。
 
 詳細 → CLAUDE.md §6.7、`todo/apriltag_localization.md` T-AT-6-21 / T-AT-6-23。
+
+## 3.4 知覚メッセージ完全途絶の即時安全停止（P8-13）
+
+`follow_goal_generator_node` の `on_timer()` 冒頭で最優先に評価するゲート。
+`is_lost()`（最終可視時刻ベースの判定）では検知できない「知覚コンテナ自体が
+クラッシュして発行が丸ごと止まる」ケースを、`perception_timeout_sec`（既定
+**2.0秒**）を超えてメッセージが届かなくなった時点で捕まえて安全停止する。
+上記3層ゲート（A〜C）より前段のチェックとして働く。
 
 ---
 
