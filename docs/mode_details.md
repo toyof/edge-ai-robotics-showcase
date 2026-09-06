@@ -414,26 +414,58 @@ flowchart LR
 
 ---
 
-### ゲート通過ロジック（_drive_through_gate）
+### ゲート通過ロジック（_drive_through_gate、N24-29で2レグ化）
 
 Nav2 の `NavigateToPose` はゴール地点が壁際やゲート敷居に近いと ABORT → リカバリ BT（Spin+BackUp）が走り、オドメトリが破壊されることがある。`_drive_through_gate` はこれを回避するために **cmd_vel 直進** でゲートを通り抜ける。
+
+**N24-29（2026-08-30）で1レグから2レグへ変更**: レグA＝ロボット→ゲート中心まで、
+レグB＝`los_unknown_heading()` で求めた「視線が通っている先の未探索が最も多い方位」へ
+`gvd_gate_through_dist`（既定1.0m）だけ進む。旧実装はゲートの延長線をそのまま進んでおり
+未探索方向と無相関だった（実測821ゲートで中央値36.8°のズレ）。**ヨー・距離計算は
+mapフレーム基準**（N24-40。odom基準だと map↔odom のずれ分だけ狙いがずれ、実機で
+8/8失敗した事例がある）。タイムアウトは2レグ通算で1本、進捗履歴はレグごとにリセット。
 
 ```mermaid
 flowchart TD
     A[Nav2 ゴール到達後] --> B{through_x あり?}
     B -- No --> Z([終了])
-    B -- Yes --> C[現在 yaw と目標 yaw の差を計算]
+    B -- Yes --> C[mapフレームで自己位置取得\n目標yawとの差を計算 N24-40]
     C --> D{yaw_err >= gvd_through_yaw_skip\n=0.30 rad?}
-    D -- Yes --> E[_pivot_turn_toward\n超信地旋回で向き直し]
+    D -- Yes --> E[_pivot_turn_toward_map\n超信地旋回で向き直し]
     D -- No --> F
-    E --> F[出発位置を odom で記録\nsx, sy]
-    F --> G[Twist\nlinear.x=0.10 m/s\n前進ループ]
-    G --> H{odom 距離 >=\ngvd_gate_through_dist\n=0.4m?}
-    H -- Yes --> I[停止 → 'dist']
-    H -- No --> J{_check_nudge_safe\nライブスキャン確認\n前方 0.35m 以内に障害物?}
-    J -- 障害物あり --> K[即停止 → 'blocked']
-    J -- 安全 --> G
+    E --> F[レグA距離を算出\nmap上のゲート中心までの距離 N24-11/29]
+    F --> G[レグA走行 _run_leg]
+    G --> R1{結果 dist?}
+    R1 -- No\nblocked/stalled/timeout/stopped --> Z
+    R1 -- Yes --> H{leg_b > 0\nかつLOS方向あり?}
+    H -- No --> Z
+    H -- Yes --> I[los_unknown_heading で\n未探索方向へ向き直し N24-29]
+    I --> J[レグB走行 _run_leg\ngvd_gate_through_dist=1.0m]
+    J --> Z
 ```
+
+`_run_leg`（レグ共通の前進ループ）内部:
+
+```mermaid
+flowchart TD
+    G1[Twist linear.x=gvd_through_speed] --> G2{そのレグの\n移動距離 >= leg_dist?}
+    G2 -- Yes --> G3([停止 → 'dist'])
+    G2 -- No --> G4{_check_nudge_safe\nライブスキャン確認}
+    G4 -- 安全 --> G5[進捗ストール判定\ndrive_progress_stalled\nN23-4]
+    G5 -- 停滞 --> G6([後退で脱出 → 'stalled'])
+    G5 -- 継続 --> G7{実時間 > deadline?\nN23-4}
+    G7 -- Yes --> G8([→ 'timeout'])
+    G7 -- No --> G1
+    G4 -- 障害物あり --> G9{block_confirmed\ngvd_through_block_confirm_sec\n既定0.3秒 連続で確定?\nN24-54c}
+    G9 -- No\nまだ単発 --> G4
+    G9 -- Yes --> G10[ライブスキャンを\nmap_harden_nodeへ焼き込み N24-59]
+    G10 --> G11([→ 'blocked'])
+```
+
+**N24-54c（2026-09-02）**: `_check_nudge_safe()` は1回のスキャンコールバックの値をそのまま使うため、
+旧実装は単発の自車体反射・LiDAR多重反射だけで即 `'blocked'` を確定していた（実機でGATE_THROUGH
+6/6全滅・約6分後の再計測では同方向2.17m先までクリアだった）。`gvd_through_block_confirm_sec`
+秒（既定0.3秒）連続して塞がっていると確認できて初めて確定する（`0.0` で従来の即時確定へロールバック）。
 
 ---
 

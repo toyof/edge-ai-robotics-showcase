@@ -174,6 +174,7 @@ CLAUDE.md §6.4。
 - ローカルコストマップは2D（`use_3d_world: false`）
 - Nav2は `/odometry/filtered` を使用（生ホイールオドメトリではない）。EKFをスキップするとナビゲーション不可
 - カスタム Behavior Tree: `behavior_trees/navigate_w_recovery.xml`（壁際スタック対策・T-23）。リカバリ順序は **BackUp（0.15m/0.10m/s）優先 → Spin（spin_dist=0.4）→ Wait → Clear**。`nav2_params.yaml` の `bt_navigator > default_nav_to_pose_bt_xml` で絶対パス参照（install 先の share パス）
+- **N24-43（2026-08-31）: `allow_unknown` はモードごとに出し分ける。** `localization=="amcl"`（既存マップでのnavのみ）は `planner_server.GridBased.allow_unknown` を `autonomy.launch.py` が実行時に `False` へ上書きする。`slam`/`local` は従来どおり `True`（探索は未知セルへゴールを置く前提のため）。汎用の `overrides`（ドット区切りキー→値）を `robot_identity.rewrite_params_file()` に追加した実装で、今後のモード別パラメータ切替もここを再利用する想定。
 
 ---
 
@@ -485,7 +486,26 @@ ROS と MCU の二重停止機構により、片方が死んでもロボット�
 
 ---
 
-# 13 参考ドキュメント
+# 13 マルチエージェント連携（フリート、F-3-1）
+
+上記1〜12は単一ロボット（Jetson Orin Nano）内で完結する構成。これとは独立に、
+**固定PCカメラで死角を補完するサブエージェント**（`toyof_robot_subagent_vision`、
+Isaac ROS非依存・x86/WSL2で動作）が同じ map 座標系を共有する別プロセスとして存在する。
+
+```
+固定PCカメラ（x86/WSL2） → subagent_vision_node
+  ├─ YOLO-World でゼロショット検出
+  ├─ 較正済み外部パラメータ（AprilTagで較正）で画像座標 → map座標へ変換
+  └─ /fleet/object_found を publish（agent_id 付き）
+```
+
+Jetson側とはトピック直書きではなく `map/rooms/<name_id>/objects.yaml` 経由の座標共有を基本とし、
+`frame_prefix`/`ns` パラメータ化で複数ロボットへの拡張にも対応する設計。詳細（トピック衝突回避・
+`agent_id` 設計・実装状況）→ [`todo/multi_agent_fleet.md`](../todo/multi_agent_fleet.md)。
+
+---
+
+# 14 参考ドキュメント
 
 | ドキュメント | 内容 |
 |-------------|------|

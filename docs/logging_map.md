@@ -99,7 +99,7 @@ KICK 39件があり、**N23-5 のスリップ棄却も3件発火していた**�
 | `metrics_node` | 可観測性: tegrastats/vmstat/トピックレート→OTel | `toyof_robot_observability` | `[latency]` `OTel` | SUB `object_tracking/info` ほか |
 | `pico_stub_node` | （sim のみ）Pico の代替。GUARD は実機と同一ロジック | `toyof_robot_vehicle` | `[GUARD]` `[PicoStub]` | 実機の `pico_bridge_node` と同じ |
 | `imu_sim_node` | （sim のみ）IMU 代替 | `toyof_robot_vehicle` | `[imu_sim]` | PUB `imu/data_raw` |
-| `laser_odom_node`（N24-68、既定は起動しない） | 並進限定レーザーオドメトリ。EKF未接続・観測専用 | `toyof_robot_vehicle` | `[laser_odom]` | SUB `scan_target_filtered`, `imu/data_aligned`, `wheel_odom` / PUB `laser_odom`, `laser_odom/debug` |
+| `laser_odom_node`（N24-68、既定 true で起動する） | 並進限定レーザーオドメトリ。EKF未接続・観測専用 | `toyof_robot_vehicle` | `[laser_odom]` | SUB `scan_target_filtered`, `imu/data_aligned`, `wheel_odom` / PUB `laser_odom`, `laser_odom/debug` |
 
 > カメラ系（`camera_perception.launch.py`: `v4l2_camera` / `RectifyNode` /
 > `ImageFormatConverterNode`）も第1層から起動されうるが、**AI頭脳層が自前で起動し直す経路もある**
@@ -145,6 +145,14 @@ KICK 39件があり、**N23-5 のスリップ棄却も3件発火していた**�
 | `tag_map_recorder_node` | タグ座標をステージングへ記録（T-AT-6-29） | `toyof_robot_localization` | `[tag_recorder]` | `tag_registration.log`（N-OBS-5） |
 | `apriltag_node` | AprilTag 検出（Isaac ROS） | `isaac_ros_apriltag` | — | `tag_registration.log`（N-OBS-5） |
 | `apriltag_servo_node` | タグ追尾サーボ | `toyof_robot_localization` | `[apriltag_servo]` | 起動元による |
+
+### 別マシン（x86/WSL2、Isaac ROS非依存）: 死角補完サブエージェント
+
+| ノード | 担当機能 | パッケージ | 代表ログタグ | 出力先 |
+|---|---|---|---|---|
+| `subagent_vision_node` | 固定PCカメラでの死角補完（F-3-1）。YOLO-World検出→map座標変換→`/fleet/object_found` | `toyof_robot_subagent_vision` | `[subagent_vision]` | Jetson側の3層とは別マシンで動くため `~/.ros/log/latest/` のみ（`hw_bringup.log`等には合流しない） |
+
+詳細 → `todo/multi_agent_fleet.md`。
 
 ---
 
