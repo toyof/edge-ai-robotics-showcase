@@ -1,0 +1,1156 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>人追従ロボットカー</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Sans+JP:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ink:#181a16;
+  --paper:#f7f4ea;
+  --panel:#ffffff;
+  --panel-2:#efeadb;
+  --muted:#5c6156;
+  --orange:#ff6a2b;
+  --orange-soft:#ffe4d4;
+  --navy:#1f2d55;
+  --navy-soft:#dfe4f2;
+  --teal:#0e8a76;
+  --teal-soft:#d7efe9;
+  --red:#d5402f;
+  --red-soft:#fbe0dc;
+  --yellow:#f2b705;
+  --font-display:'Archivo Black','IBM Plex Sans JP',sans-serif;
+  --font-body:'IBM Plex Sans JP',sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ink:#eef0e8; --paper:#111310; --panel:#191c17; --panel-2:#20241d;
+    --muted:#9aa294; --orange:#ff8548; --orange-soft:#3a2416;
+    --navy:#8fa2e8; --navy-soft:#1c2540; --teal:#4fd9bf; --teal-soft:#123029;
+    --red:#ff7a68; --red-soft:#3a1a16; --yellow:#f2c94c;
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#eef0e8; --paper:#111310; --panel:#191c17; --panel-2:#20241d;
+  --muted:#9aa294; --orange:#ff8548; --orange-soft:#3a2416;
+  --navy:#8fa2e8; --navy-soft:#1c2540; --teal:#4fd9bf; --teal-soft:#123029;
+  --red:#ff7a68; --red-soft:#3a1a16; --yellow:#f2c94c;
+}
+
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--font-body);
+  padding:0 clamp(14px,4vw,40px);
+  padding-block:clamp(18px,4vw,36px) 40px;
+}
+.sheet{max-width:1080px;margin:0 auto;}
+
+/* ---- top strip badge ---- */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;flex-wrap:wrap;margin-bottom:16px;
+}
+.badge-series{
+  display:flex;align-items:center;gap:10px;
+  background:var(--ink);color:var(--paper);
+  font-family:var(--font-mono);font-size:12px;letter-spacing:.06em;
+  padding:8px 14px;border-radius:999px;
+}
+.badge-series .dot{width:7px;height:7px;border-radius:50%;background:var(--orange);}
+.badge-count{
+  font-family:var(--font-display);font-size:14px;
+  background:var(--orange);color:#181a16;
+  padding:8px 14px;border-radius:999px;border:2px solid var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+
+/* ---- track chip (人追従 / 地図作成 の識別) ---- */
+.track-chip{
+  display:inline-flex;align-items:center;gap:7px;font-family:var(--font-mono);font-size:11.5px;font-weight:600;
+  padding:6px 13px;border-radius:999px;border:2px solid var(--ink);margin-bottom:14px;
+}
+.track-chip .dot2{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.track-chip.map{background:var(--teal-soft);}
+.track-chip.map .dot2{background:var(--teal);}
+.track-chip.follow{background:var(--orange-soft);}
+.track-chip.follow .dot2{background:var(--orange);}
+.track-chip.overview{background:var(--panel-2);}
+.track-chip.overview .dot2{background:var(--muted);}
+
+/* ---- stage / carousel ---- */
+.stage{overflow:hidden;border-radius:18px;}
+.track{display:flex;width:100%;}
+@media (prefers-reduced-motion:no-preference){
+  .track{transition:transform .38s cubic-bezier(.2,.7,.3,1);}
+}
+.slide{flex:0 0 100%;min-width:0;padding-right:2px;}
+
+/* ---- hero block (slide 1) ---- */
+.hero{
+  background:var(--panel); border:3px solid var(--ink); border-radius:18px;
+  padding:clamp(22px,4vw,38px); box-shadow:7px 7px 0 var(--ink); margin-bottom:18px;
+}
+.hero .kicker{
+  font-family:var(--font-mono);font-size:13px;letter-spacing:.1em;color:var(--orange);
+  text-transform:uppercase;font-weight:600;margin-bottom:10px;
+}
+.hero h1{
+  font-family:var(--font-display);font-size:clamp(32px,6vw,58px);line-height:.98;
+  margin:0 0 6px;letter-spacing:-.01em;text-wrap:balance;
+}
+.hero h1 span{color:var(--orange);}
+.hero .sub{
+  font-family:var(--font-display);font-size:clamp(14px,1.8vw,18px);color:var(--navy);
+  margin:0 0 14px;text-wrap:balance;
+}
+.hero p.desc{max-width:66ch;font-size:15px;line-height:1.75;margin:0 0 16px;}
+.keyidea{
+  display:flex;gap:14px;align-items:flex-start;background:var(--navy-soft);
+  border:2px solid var(--navy);border-radius:12px;padding:15px 17px;
+}
+.keyidea .tag{font-family:var(--font-display);font-size:11px;color:var(--navy);flex-shrink:0;padding-top:2px;}
+.keyidea p{margin:0;font-size:14px;line-height:1.65;}
+.keyidea b{color:var(--navy);}
+
+/* ---- overview boxes (hero: 人追従 / 地図作成 概要) ---- */
+.overview-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px;}
+@media (max-width:680px){.overview-grid{grid-template-columns:1fr;}}
+.overview-box{background:var(--panel-2);border:2px solid var(--ink);border-radius:12px;padding:16px 18px;border-left-width:6px;}
+.overview-box.follow{border-left-color:var(--orange);}
+.overview-box.map{border-left-color:var(--teal);}
+.overview-box h4{margin:0 0 10px;font-family:var(--font-display);font-size:16px;}
+.overview-box ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px;}
+.overview-box li{font-size:13.5px;font-weight:600;}
+
+/* ---- slide section title ---- */
+.slide-title{
+  display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px;
+}
+.slide-title h2{
+  font-family:var(--font-display);font-size:clamp(22px,3.6vw,32px);margin:0;text-wrap:balance;
+}
+.slide-title .n{
+  font-family:var(--font-mono);font-size:13px;color:var(--muted);
+}
+.slide-title-wrap{margin-bottom:16px;}
+
+/* ---- panel grid ---- */
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
+@media (max-width:760px){ .grid{grid-template-columns:1fr;} }
+
+.panel{
+  background:var(--panel);border:3px solid var(--ink);border-radius:16px;overflow:hidden;
+  box-shadow:6px 6px 0 var(--ink);display:flex;flex-direction:column;
+}
+/* 枠(パネルヘッダー)の色は全パネル共通に統一する */
+.panel-head{
+  display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:3px solid var(--ink);
+  background:var(--orange);color:#181a16;
+}
+.panel-head .num{
+  font-family:var(--font-display);font-size:14px;width:26px;height:26px;border-radius:50%;
+  background:#181a16;color:var(--orange);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.panel-head h3{margin:0;font-family:var(--font-display);font-size:15px;letter-spacing:.01em;}
+.panel-body{padding:18px 18px 20px;display:flex;flex-direction:column;gap:14px;flex:1;}
+
+.panel ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px;}
+.panel li{font-size:14px;line-height:1.6;padding-left:16px;position:relative;}
+.panel li::before{content:"▸";position:absolute;left:0;top:0;color:var(--orange);font-weight:700;}
+
+.twin{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.twin .col{background:var(--panel-2);border:2px solid var(--ink);border-radius:10px;padding:12px;}
+.twin .col h4{margin:0 0 8px;font-family:var(--font-mono);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;}
+.twin .col ul{gap:6px;}
+.twin .col li{font-size:12.5px;}
+@media (max-width:480px){.twin{grid-template-columns:1fr;}}
+
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+.flow .box{
+  font-family:var(--font-mono);font-size:11.5px;font-weight:600;background:var(--panel-2);
+  border:2px solid var(--ink);border-radius:8px;padding:8px 10px;text-align:center;flex:1 1 auto;min-width:84px;
+}
+.flow .arw{font-size:14px;color:var(--muted);flex-shrink:0;}
+
+.stackd{display:flex;flex-direction:column;gap:8px;}
+.stackd .row{display:flex;align-items:center;gap:10px;background:var(--panel-2);border:2px solid var(--ink);border-radius:10px;padding:10px 12px;}
+.stackd .row .lbl{font-family:var(--font-mono);font-size:11px;color:var(--muted);width:74px;flex-shrink:0;}
+.stackd .row .lbl b{display:block;font-family:var(--font-body);font-size:13px;color:var(--ink);font-weight:700;}
+.stackd .row .chips{display:flex;flex-wrap:wrap;gap:6px;}
+.chip{font-family:var(--font-mono);font-size:11px;background:var(--panel);border:1.5px solid var(--ink);border-radius:6px;padding:3px 8px;}
+.chip.active{background:var(--teal-soft);border-color:var(--teal);font-weight:600;}
+.chip.dim{opacity:.4;text-decoration:line-through;text-decoration-thickness:1.5px;}
+.stackd .connector{text-align:center;font-size:13px;color:var(--muted);height:4px;display:flex;align-items:center;justify-content:center;}
+.stackd .row.dim-row{opacity:.55;}
+.chipnote{display:flex;flex-wrap:wrap;gap:14px;font-family:var(--font-mono);font-size:11px;color:var(--muted);}
+.chipnote .k{display:inline-flex;align-items:center;gap:6px;}
+.chipnote .sw5{width:12px;height:12px;border-radius:3px;flex-shrink:0;}
+
+.ptable{width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:12.5px;}
+.ptable td{padding:7px 6px;border-bottom:1.5px dashed var(--ink);}
+.ptable tr:last-child td{border-bottom:none;}
+.ptable td:first-child{color:var(--muted);}
+.ptable td:last-child{text-align:right;font-weight:600;font-variant-numeric:tabular-nums;}
+
+.gates{display:flex;flex-direction:column;gap:10px;}
+.gate{display:flex;gap:12px;align-items:flex-start;background:var(--panel-2);border:2px solid var(--ink);border-radius:10px;padding:10px 12px;}
+.gate .id{
+  font-family:var(--font-display);font-size:14px;background:var(--red);color:#fff3f1;
+  width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.gate .t{font-size:13px;line-height:1.55;}
+.gate .t b{display:block;font-size:13.5px;margin-bottom:2px;}
+
+.takeaways{
+  background:var(--ink);color:var(--paper);border-radius:18px;padding:clamp(20px,4vw,30px);
+  margin-top:16px;display:grid;grid-template-columns:1.1fr .9fr;gap:24px;align-items:center;
+}
+@media (max-width:760px){.takeaways{grid-template-columns:1fr;}}
+.takeaways h3{font-family:var(--font-display);font-size:14px;color:var(--yellow);margin:0 0 14px;letter-spacing:.03em;}
+.takeaways ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px;}
+.takeaways li{font-size:13.5px;line-height:1.6;padding-left:26px;position:relative;}
+.takeaways li::before{content:"✓";position:absolute;left:0;top:0;color:var(--yellow);font-weight:700;font-family:var(--font-display);}
+.quote{background:rgba(247,244,234,.08);border:2px solid rgba(247,244,234,.35);border-radius:12px;padding:16px;}
+.quote p{margin:0;font-family:var(--font-display);font-size:14px;line-height:1.55;text-wrap:balance;}
+.quote .by{margin-top:10px;font-family:var(--font-mono);font-size:11px;color:var(--yellow);}
+
+/* ---- state / marker legend (rviz-style) ---- */
+.legend{display:flex;flex-direction:column;gap:12px;}
+.lg{display:grid;grid-template-columns:44px 1fr;gap:12px;align-items:center;}
+.lg .sw{display:flex;align-items:center;justify-content:center;height:34px;}
+.lg .t{font-size:13px;line-height:1.55;}
+.lg .t b{display:block;font-size:13.5px;margin-bottom:1px;}
+.lg .t em{display:block;font-style:normal;color:var(--muted);font-family:var(--font-mono);font-size:11px;margin-bottom:3px;}
+.alert{color:var(--red);font-weight:700;}
+.sw-disc{width:34px;height:34px;border-radius:50%;background:rgba(51,102,255,.20);border:2px solid rgba(51,102,255,.85);}
+.sw-sphere{width:22px;height:22px;border-radius:50%;background:rgb(0,235,55);border:1.5px solid var(--ink);}
+.sw-sphere.gray{background:rgba(128,128,140,.45);}
+.sw-sphere.person{background:#7ec8ff;}
+.sw-pillar{width:13px;height:32px;border-radius:4px;background:rgba(0,235,55,.55);border:1.5px solid var(--ink);}
+.sw-arrow{font-family:var(--font-display);font-size:19px;line-height:1;}
+.sw-arrow.orange{color:#ff7a00;}
+.sw-arrow.white{color:var(--muted);}
+.sw-text{font-family:var(--font-display);font-size:13px;color:var(--muted);border:1.5px dashed var(--ink);border-radius:5px;padding:2px 7px;}
+.note{
+  font-family:var(--font-mono);font-size:11.5px;line-height:1.6;color:var(--muted);
+  border-top:1.5px dashed var(--ink);padding-top:10px;margin-top:auto;
+}
+.vocab{display:flex;flex-direction:column;gap:10px;}
+.vrow{display:grid;grid-template-columns:14px 148px 1fr;gap:10px;align-items:baseline;}
+.vdot{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--ink);align-self:center;}
+.vname{font-family:var(--font-mono);font-size:12.5px;font-weight:600;}
+.vdesc{font-size:13px;line-height:1.55;}
+@media (max-width:560px){
+  .vrow{grid-template-columns:14px 1fr;}
+  .vrow .vdesc{grid-column:2;}
+}
+code{font-family:var(--font-mono);font-size:.92em;background:rgba(127,127,127,.18);border-radius:4px;padding:1px 5px;}
+
+/* ---- decision flow table ---- */
+.tscroll{overflow-x:auto;}
+.ftable{width:100%;min-width:540px;border-collapse:collapse;font-size:12.5px;}
+.ftable th{
+  font-family:var(--font-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--muted);text-align:left;padding:0 8px 8px;border-bottom:2px solid var(--ink);font-weight:600;
+}
+.ftable td{padding:9px 8px;border-bottom:1.5px dashed var(--ink);vertical-align:top;line-height:1.55;}
+.ftable tr:last-child td{border-bottom:none;}
+.ftable .step{font-family:var(--font-mono);font-size:11px;color:var(--muted);width:26px;text-align:right;}
+.ftable .cond{width:32%;}
+.ftable .out{width:23%;}
+.out-tag{
+  display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);
+  font-size:11.5px;font-weight:600;white-space:nowrap;
+}
+.out-tag .vdot{width:10px;height:10px;flex-shrink:0;}
+.out-none{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);}
+
+/* ---- flowchart figure ---- */
+.flowfig{margin:0;}
+.flowfig svg{width:100%;height:auto;display:block;}
+.flowfig figcaption{
+  margin-top:12px;font-family:var(--font-mono);font-size:11.5px;line-height:1.7;color:var(--muted);
+}
+
+/* ---- vertical step flow (end-to-end mechanisms) ---- */
+.vflow{position:relative;padding-left:16px;border-left:2px dashed var(--ink);display:flex;flex-direction:column;gap:16px;margin-left:14px;}
+.vflow .vstep{position:relative;}
+.vflow .vstep::before{
+  content:attr(data-n);position:absolute;left:-31px;top:-2px;width:26px;height:26px;border-radius:50%;
+  background:var(--panel-2);color:var(--ink);font-family:var(--font-mono);font-size:11.5px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;border:2px solid var(--ink);
+}
+.vflow .vstep b{display:block;font-size:14px;margin-bottom:3px;}
+.vflow .vstep span{font-size:12.5px;color:var(--muted);line-height:1.6;}
+.vflow .vstep.loop{border:1.5px dashed var(--teal);border-radius:8px;padding:9px 12px;background:var(--teal-soft);margin-left:-12px;}
+.vflow .vstep.handoff{border:1.5px dashed var(--orange);border-radius:8px;padding:9px 12px;background:var(--orange-soft);margin-left:-12px;}
+
+/* ---- rviz-style mockup illustration ---- */
+.mockup-frame{border:3px solid var(--ink);border-radius:12px;overflow:hidden;background:#0a0a0a;}
+.mockup-titlebar{display:flex;align-items:center;gap:6px;padding:8px 10px;background:#1c1c1c;}
+.mockup-titlebar .dot3{width:9px;height:9px;border-radius:50%;}
+.mockup-frame svg{display:block;width:100%;height:auto;}
+.mockup-note{font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6;}
+
+/* ---- carousel controller bar ---- */
+.controller{
+  margin-top:16px;background:var(--panel);border:3px solid var(--ink);border-radius:14px;
+  box-shadow:6px 6px 0 var(--ink);padding:12px 16px;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+}
+.controller .info{font-family:var(--font-mono);font-size:12px;color:var(--muted);line-height:1.5;}
+.controller .info b{color:var(--ink);font-family:var(--font-body);font-weight:700;}
+.controller .dots{display:flex;gap:7px;}
+.controller .dots button{
+  width:9px;height:9px;border-radius:50%;border:2px solid var(--ink);background:transparent;
+  padding:0;cursor:pointer;
+}
+.controller .dots button[aria-current="true"]{background:var(--orange);}
+.controller .arrows{display:flex;gap:8px;}
+.controller .arrows button{
+  font-family:var(--font-display);font-size:13px;background:var(--ink);color:var(--paper);
+  border:2px solid var(--ink);border-radius:8px;padding:8px 14px;cursor:pointer;
+}
+.controller .arrows button:disabled{opacity:.35;cursor:default;}
+.controller .arrows button:focus-visible,.controller .dots button:focus-visible{outline:2px solid var(--orange);outline-offset:2px;}
+</style>
+</head>
+<body>
+
+<div class="sheet">
+
+  <div class="topbar">
+    <div class="badge-series"><span class="dot"></span>PERSON-FOLLOWING ROBOT SERIES</div>
+    <div class="badge-count"><span id="curNum">1</span>&nbsp;/&nbsp;8</div>
+  </div>
+
+  <div class="stage">
+    <div class="track" id="track">
+
+      <!-- SLIDE 1: 概要（共通基盤） -->
+      <div class="slide">
+        <div class="hero">
+          <div class="kicker">Personal Project — Jetson Orin Nano</div>
+          <h1>人追従<span>ロボットカー</span></h1>
+          <p class="sub">OVERVIEW — 人追従トラック / 地図作成トラック 共通の基盤</p>
+          <p class="desc">Jetson Orin Nano で AI 推論・ROS2 制御を、Raspberry Pi Pico W でモーター/サーボ制御を行う自作ロボット。この資料は「① 人追従（カメラで人を検出・追従し、見失っても再発見する）」と「② 地図作成（SLAMで自律的に地図を作る）」という2つの機能トラックで構成する。以降のスライドは、それぞれどちらのトラックの話かをバッジで示す。</p>
+          <div class="keyidea">
+            <div class="tag">KEY<br>IDEA</div>
+            <p><b>「見せられる背骨」を1本通す設計。</b>人追従 → ロスト → リカバリ → 再捕捉、この流れを止めずに動かし切ることを最優先に、知覚・安全・駆動の各層を積み上げている。地図作成はその前提となる基盤機能。</p>
+          </div>
+
+          <div class="overview-grid">
+            <div class="overview-box follow">
+              <h4>人追従</h4>
+              <ol>
+                <li>①人追従</li>
+                <li>②ロスト検知</li>
+                <li>③Tier1 先回り</li>
+                <li>④Tier2 探索</li>
+                <li>⑤再捕捉</li>
+              </ol>
+            </div>
+            <div class="overview-box map">
+              <h4>地図作成</h4>
+              <ol>
+                <li>①起動</li>
+                <li>②SLAM開始</li>
+                <li>③探索ループ</li>
+                <li>④地図保存</li>
+                <li>⑤ハンドオフ</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><span class="num">1</span><h3>全体アーキテクチャ階層</h3></div>
+          <div class="panel-body">
+            <div class="stackd">
+              <div class="row"><div class="lbl">LAYER 3<b>AI頭脳</b></div>
+                <div class="chips"><span class="chip">ai_mode_manager</span><span class="chip">LLM/YOLO/VLM</span></div></div>
+              <div class="connector">↑</div>
+              <div class="row"><div class="lbl">LAYER 2<b>自律</b></div>
+                <div class="chips"><span class="chip">Nav2</span><span class="chip">SLAM Toolbox</span><span class="chip">AMCL</span></div></div>
+              <div class="connector">↑</div>
+              <div class="row"><div class="lbl">LAYER 1<b>ハードウェア</b></div>
+                <div class="chips"><span class="chip">wheel_odom+IMU→EKF</span><span class="chip">pico_bridge</span><span class="chip">GUARD</span></div></div>
+            </div>
+            <div class="note" style="border-top:none;padding-top:0;margin-top:0;">上＝AI頭脳層、下＝ハードウェア層。矢印は「下位層の上に成り立つ」依存の向き。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SLIDE 2: 地図作成機能（MAPPING #1） -->
+      <div class="slide">
+        <div class="slide-title-wrap">
+          <span class="track-chip map"><span class="dot2"></span>地図作成トラック — MAPPING</span>
+          <div class="slide-title"><h2>地図作成機能</h2><span class="n">WHAT RUNS DURING SLAM</span></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><span class="num">1</span><h3>地図作成モードで動く層</h3></div>
+          <div class="panel-body">
+            <div class="stackd">
+              <div class="row dim-row"><div class="lbl">LAYER 3<b>AI頭脳</b></div>
+                <div class="chips">
+                  <span class="chip active">ai_mode_manager</span>
+                  <span class="chip dim">LLM</span><span class="chip dim">YOLO</span><span class="chip dim">YOLO-World</span>
+                </div></div>
+              <div class="connector">↑</div>
+              <div class="row"><div class="lbl">LAYER 2<b>自律</b></div>
+                <div class="chips">
+                  <span class="chip active">SLAM Toolbox</span>
+                  <span class="chip active">AprilTag+tag_map_recorder</span>
+                  <span class="chip dim">Nav2</span><span class="chip dim">AMCL</span>
+                </div></div>
+              <div class="connector">↑</div>
+              <div class="row"><div class="lbl">LAYER 1<b>ハードウェア</b></div>
+                <div class="chips">
+                  <span class="chip active">wheel_odom+IMU→EKF</span>
+                  <span class="chip active">pico_bridge</span>
+                  <span class="chip active">GUARD</span>
+                </div></div>
+            </div>
+            <div class="chipnote">
+              <span class="k"><span class="sw5" style="background:var(--teal-soft);border:1.5px solid var(--teal);"></span>使用中</span>
+              <span class="k"><span class="sw5" style="background:var(--panel-2);border:1.5px solid var(--ink);opacity:.5;"></span>未使用（グレーアウト＝取り消し線）</span>
+            </div>
+            <ul>
+              <li><b>ハードウェア層は全部使う。</b>駆動・安全ゲートは追従中と共通</li>
+              <li><b>Nav2は使わない。</b>まだ地図が無いため探索ループが直接 cmd_vel を駆動する（N23-4）</li>
+              <li><b>AMCLも使わない。</b>自己位置推定に必要な地図がまだ存在しない</li>
+              <li><b>LLM/YOLO/YOLO-Worldは休止。</b>ai_mode_managerがLifecycleを排他制御するため、地図作成中は同時に動かない</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- SLIDE 3: 地図の状況（MAPPING #2-5） -->
+      <div class="slide">
+        <div class="slide-title-wrap">
+          <span class="track-chip map"><span class="dot2"></span>地図作成トラック — MAPPING</span>
+          <div class="slide-title"><h2>地図の状況</h2><span class="n">MAP STATUS — VISUALIZED VIA RVIZ</span></div>
+        </div>
+        <p class="desc" style="margin-bottom:16px;">地図作成中、ロボットが「今どこまで地図を作れていて、どこを試しているか」は、RViz上の色分けされたマーカーとして表れる。ここではRVizの操作方法ではなく、<b>地図がどういう状態にあるか</b>の読み解き方を説明する。</p>
+
+        <div class="panel">
+          <div class="panel-head"><span class="num">2</span><h3>地図作成中の状態（再現イラスト）</h3></div>
+          <div class="panel-body">
+            <div class="mockup-frame">
+              <div class="mockup-titlebar">
+                <span class="dot3" style="background:#ff5f57"></span>
+                <span class="dot3" style="background:#febc2e"></span>
+                <span class="dot3" style="background:#28c840"></span>
+              </div>
+              <svg viewBox="0 0 800 460" role="img" aria-label="マッピング中のRViz画面を再現したイラスト。地図・ロボット・エリア円・ゲート球・ゴールマーカーを配置した図">
+                <defs>
+                  <marker id="mk-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M0,0 L10,5 L0,10 z" fill="#ff9100"></path>
+                  </marker>
+                  <marker id="mk-white" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M0,0 L10,5 L0,10 z" fill="#ffffff"></path>
+                  </marker>
+                </defs>
+                <rect x="0" y="0" width="800" height="460" fill="#0a0a0a"></rect>
+                <rect x="40" y="30" width="720" height="400" rx="4" fill="#6b6f76"></rect>
+                <rect x="90" y="70" width="240" height="190" fill="#eef0ee" stroke="#050505" stroke-width="6"></rect>
+                <rect x="330" y="140" width="120" height="55" fill="#eef0ee" stroke="#050505" stroke-width="6"></rect>
+                <rect x="450" y="55" width="260" height="240" fill="#eef0ee" stroke="#050505" stroke-width="6"></rect>
+                <rect x="615" y="70" width="70" height="60" fill="#6b6f76"></rect>
+
+                <polygon points="165,180 138,167 138,193" fill="#ff7a1a" stroke="#ffffff" stroke-width="1.5"></polygon>
+
+                <circle cx="430" cy="160" r="95" fill="rgba(60,110,255,.28)" stroke="rgb(90,140,255)" stroke-width="2" stroke-dasharray="6 4"></circle>
+
+                <circle cx="560" cy="110" r="8" fill="rgba(170,170,180,.55)"></circle>
+
+                <circle cx="470" cy="195" r="8" fill="#14e13c" stroke="#053d13" stroke-width="1"></circle>
+                <line x1="470" y1="195" x2="452" y2="212" stroke="#ff9100" stroke-width="3" marker-end="url(#mk-orange)"></line>
+
+                <circle cx="400" cy="150" r="16" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-dasharray="3 3"></circle>
+                <circle cx="400" cy="150" r="10" fill="#14e13c" stroke="#053d13" stroke-width="1"></circle>
+                <line x1="400" y1="150" x2="385" y2="172" stroke="#ff9100" stroke-width="3" marker-end="url(#mk-orange)"></line>
+                <line x1="400" y1="150" x2="438" y2="150" stroke="#ffffff" stroke-width="2.5" marker-end="url(#mk-white)"></line>
+                <line x1="400" y1="150" x2="400" y2="130" stroke="#14e13c" stroke-width="1.5"></line>
+                <text x="400" y="122" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="13" font-weight="700" fill="#14e13c">GATE</text>
+              </svg>
+            </div>
+            <div class="mockup-note">※ 実機スクリーンショットではなく再現イラスト。後日、実機のRViz画面に差し替え予定。色・形は下のパネルの凡例と対応している。</div>
+          </div>
+        </div>
+
+        <div class="grid" style="margin-top:16px;">
+          <div class="panel">
+            <div class="panel-head"><span class="num">3</span><h3>いま閉じている範囲とゲート候補</h3></div>
+            <div class="panel-body">
+              <div class="legend">
+                <div class="lg">
+                  <div class="sw"><div class="sw-disc"></div></div>
+                  <div class="t"><b>薄い青の大きな円</b><em>gvd_area — 直径 約4m</em>いま集中して閉じにいく「エリア」。この円の中のゲートだけが選択対象になる</div>
+                </div>
+                <div class="lg">
+                  <div class="sw"><div class="sw-sphere"></div></div>
+                  <div class="t"><b>緑の球</b><em>gvd_gates</em>いま選べるゲート候補。<b style="display:inline">球の直径＝そこを通れる幅</b>（clearance）</div>
+                </div>
+                <div class="lg">
+                  <div class="sw"><div class="sw-sphere gray"></div></div>
+                  <div class="t"><b>灰色の半透明な球</b><em>gvd_gates_out_of_area</em>エリア外のゲート。認識はしているが、commit中は選ばれない</div>
+                </div>
+                <div class="lg">
+                  <div class="sw"><span class="sw-arrow orange">➔</span></div>
+                  <div class="t"><b>オレンジの矢印</b><em>gvd_waypoints</em>ゲート中心→ウェイポイント。<span class="alert">通り抜ける向きではない</span>（近傍で最も広い点を指しているだけ）</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><span class="num">4</span><h3>いま向かっているゴール</h3></div>
+            <div class="panel-body">
+              <div class="legend">
+                <div class="lg">
+                  <div class="sw"><div class="sw-pillar"></div></div>
+                  <div class="t"><b>縦長の円柱</b><em>gvd_goal — φ0.18 × h0.70m</em>現在のゴール地点。色はゴールの出どころを表す</div>
+                </div>
+                <div class="lg">
+                  <div class="sw"><span class="sw-text">ABC</span></div>
+                  <div class="t"><b>円柱の真上の文字</b><em>gvd_goal_label</em>ゴール源のラベル（下表）。常にカメラ正面を向く</div>
+                </div>
+                <div class="lg">
+                  <div class="sw"><span class="sw-arrow white">➔</span></div>
+                  <div class="t"><b>白い矢印</b><em>gvd_goal_through</em>ゴール→通り抜け先。GATE_THROUGHはこの区間ぶん余分に前進する</div>
+                </div>
+              </div>
+              <div class="note">マーカーには寿命がある（ゲート15秒 / ゴール60秒）。探索が止まると消えるのは正常な挙動。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:16px;">
+          <div class="panel-head"><span class="num">5</span><h3>文字ラベルの意味＝ゴールの出どころ</h3></div>
+          <div class="panel-body">
+            <div class="vocab">
+              <div class="vrow"><span class="vdot" style="background:rgb(0,255,51)"></span><span class="vname">GATE</span><span class="vdesc">GVD骨格上の通路ゲート。通常の探索目的地</span></div>
+              <div class="vrow"><span class="vdot" style="background:rgb(255,0,255)"></span><span class="vname">OPEN-BOUNDARY</span><span class="vdesc">エリア内にゲートが立たないとき、未閉鎖の境界そのものを目的地にした</span></div>
+              <div class="vrow"><span class="vdot" style="background:rgb(0,204,255)"></span><span class="vname">OPENING</span><span class="vdesc">開口部フォールバック。未知が多く残る枝でも試す</span></div>
+              <div class="vrow"><span class="vdot" style="background:rgb(255,255,0)"></span><span class="vname">MICRO</span><span class="vdesc">至近距離の微小ゴール</span></div>
+              <div class="vrow"><span class="vdot" style="background:rgb(255,153,0)"></span><span class="vname">FRONTIER</span><span class="vdesc">既知と未知の境界（フロンティア）由来</span></div>
+              <div class="vrow"><span class="vdot" style="background:rgb(178,178,178)"></span><span class="vname">その他（灰）</span><span class="vdesc">想定外の源。ラベルには源の名前がそのまま大文字で出る</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="keyidea" style="margin-top:16px;">
+          <div class="tag">WHY</div>
+          <p><b>「ゲートと無関係な場所へ動いていく」ように見えた問題への対策。</b>緑の球は <code>gvd_gate</code> 由来の候補しか描かないため、OPEN-BOUNDARY や OPENING のゴールはRVizに一切現れなかった。ゴール源を色と文字で出すことで、その移動が設計どおりか事故かを走行中に判別できる。</p>
+        </div>
+      </div>
+
+      <!-- SLIDE 4: 地図作成の仕組み（MAPPING #6-10） -->
+      <div class="slide">
+        <div class="slide-title-wrap">
+          <span class="track-chip map"><span class="dot2"></span>地図作成トラック — MAPPING</span>
+          <div class="slide-title"><h2>地図作成の仕組み</h2><span class="n">HOW MAPPING WORKS, END TO END</span></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><span class="num">6</span><h3>全体の流れ（起動 → 保存 → ハンドオフ）</h3></div>
+          <div class="panel-body">
+            <div class="vflow">
+              <div class="vstep" data-n="1"><b>mapping モード起動</b><span>standalone起動、または「タグ検出＋対応マップなし」を検知して自動起動</span></div>
+              <div class="vstep" data-n="2"><b>砲塔を原点へ合わせる</b><span>home_turret() で pan/tilt をリセット。恒等TFを主張する側が実際に原点を作る（T-AT-6-24a）</span></div>
+              <div class="vstep" data-n="3"><b>タグ前スキャン（あれば）</b><span>後段のタグ座標確定のため、事前にAprilTagを検出しておく</span></div>
+              <div class="vstep" data-n="4"><b>SLAM Toolbox でスキャンマッチング開始</b><span>オドメトリ＋LiDARからオンラインで /map を構築</span></div>
+              <div class="vstep loop" data-n="5"><b>探索ループ（GVD/Frontier/Patrol）を回し続ける</b><span>1サイクルごとに次のゴールを決定 → 到達 → 記帳、を繰り返す。詳細は次のパネル</span></div>
+              <div class="vstep" data-n="6"><b>完了 or ストール判定</b><span>局所/全体の停滞、またはNO_GATES 4回連続で探索を終了</span></div>
+              <div class="vstep" data-n="7"><b>地図を保存</b><span>map_saver_cli で pgm/yaml を書き出し。成否は戻り値ではなく<b style="display:inline">ファイルのmtime</b>で判定（N9-4c）</span></div>
+              <div class="vstep" data-n="8"><b>タグ座標を確定</b><span>ステージングファイルから本体の tag_db.yaml へマージ。地図が保存できたときだけ（T-AT-6-29）</span></div>
+              <div class="vstep handoff" data-n="9"><b>ハンドオフ</b><span>正常/ストール完了なら、既存マップのNav2(AMCL)へ切替え、最寄りタグに正対して待機（N24-79）</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:16px;">
+          <div class="panel-head"><span class="num">7</span><h3>同じ判断をフローチャートで（探索ループの詳細）</h3></div>
+          <div class="panel-body">
+            <figure class="flowfig">
+              <svg viewBox="0 0 900 1450" role="img" aria-label="探索の判断フロー図">
+                <defs>
+                  <marker id="fc-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
+                  </marker>
+                </defs>
+
+                <g fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="220" y1="80"   x2="220" y2="133" marker-end="url(#fc-arrow)"></line>
+                  <line x1="220" y1="245"  x2="220" y2="293" marker-end="url(#fc-arrow)"></line>
+                  <line x1="220" y1="355"  x2="220" y2="403" marker-end="url(#fc-arrow)"></line>
+                  <line x1="220" y1="515"  x2="220" y2="553" marker-end="url(#fc-arrow)"></line>
+                  <line x1="220" y1="665"  x2="220" y2="703" marker-end="url(#fc-arrow)"></line>
+                  <line x1="220" y1="815"  x2="220" y2="853" marker-end="url(#fc-arrow)"></line>
+                  <line x1="220" y1="965"  x2="220" y2="1003" marker-end="url(#fc-arrow)"></line>
+                  <line x1="220" y1="1115" x2="220" y2="1153" marker-end="url(#fc-arrow)"></line>
+                  <line x1="220" y1="1265" x2="220" y2="1308" marker-end="url(#fc-arrow)"></line>
+                  <line x1="370" y1="190"  x2="518" y2="190"  marker-end="url(#fc-arrow)"></line>
+                  <line x1="370" y1="460"  x2="518" y2="460"  marker-end="url(#fc-arrow)"></line>
+                  <line x1="370" y1="610"  x2="518" y2="610"  marker-end="url(#fc-arrow)"></line>
+                  <line x1="370" y1="760"  x2="518" y2="760"  marker-end="url(#fc-arrow)"></line>
+                  <line x1="370" y1="910"  x2="518" y2="910"  marker-end="url(#fc-arrow)"></line>
+                  <line x1="370" y1="1060" x2="518" y2="1060" marker-end="url(#fc-arrow)"></line>
+                  <line x1="370" y1="1210" x2="518" y2="1210" marker-end="url(#fc-arrow)"></line>
+                </g>
+
+                <g font-family="'IBM Plex Sans JP',sans-serif" font-size="13" text-anchor="middle" fill="currentColor">
+                  <g font-size="11" fill="currentColor" opacity=".75">
+                    <text x="444" y="182">はい</text>
+                    <text x="444" y="452">はい</text>
+                    <text x="444" y="602">はい</text>
+                    <text x="444" y="752">はい</text>
+                    <text x="444" y="902">はい</text>
+                    <text x="444" y="1052">はい</text>
+                    <text x="444" y="1202">はい</text>
+                    <text x="238" y="220" text-anchor="start">いいえ</text>
+                    <text x="238" y="490" text-anchor="start">いいえ</text>
+                    <text x="238" y="640" text-anchor="start">いいえ</text>
+                    <text x="238" y="790" text-anchor="start">いいえ</text>
+                    <text x="238" y="940" text-anchor="start">いいえ</text>
+                    <text x="238" y="1090" text-anchor="start">いいえ</text>
+                    <text x="238" y="1290" text-anchor="start">いいえ</text>
+                  </g>
+
+                  <rect x="70" y="30" width="300" height="50" rx="25" fill="none" stroke="currentColor" stroke-width="2"></rect>
+                  <text x="220" y="60">新サイクル(/map更新ごと)</text>
+
+                  <polygon points="220,135 370,190 220,245 70,190" fill="none" stroke="currentColor" stroke-width="2"></polygon>
+                  <text x="220" y="183">新規面積が</text>
+                  <text x="220" y="200">伸びていない?</text>
+
+                  <rect x="520" y="165" width="300" height="50" rx="8" fill="rgba(140,140,150,.22)" stroke="currentColor" stroke-width="1.5"></rect>
+                  <text x="670" y="185" font-weight="600">探索完了</text>
+                  <text x="670" y="202" font-size="10.5" fill="currentColor" opacity=".7">停滞終了(局所/全体)</text>
+
+                  <rect x="70" y="295" width="300" height="60" rx="8" fill="none" stroke="currentColor" stroke-width="2"></rect>
+                  <text x="220" y="320">GVD骨格を生成→ゲート検出</text>
+                  <text x="220" y="337" font-size="10.5" opacity=".7">(エリア内を優先、尽きれば解放)</text>
+
+                  <polygon points="220,405 370,460 220,515 70,460" fill="none" stroke="currentColor" stroke-width="2"></polygon>
+                  <text x="220" y="453">ゲートが</text>
+                  <text x="220" y="470">見つかった?</text>
+
+                  <rect x="520" y="435" width="300" height="50" rx="8" fill="rgba(0,255,51,.16)" stroke="rgb(20,150,60)" stroke-width="1.5"></rect>
+                  <text x="670" y="455" font-weight="600">GATE</text>
+                  <text x="670" y="472" font-size="10.5" fill="currentColor" opacity=".7">該当ウェイポイントをNav2へ送信</text>
+
+                  <polygon points="220,555 370,610 220,665 70,610" fill="none" stroke="currentColor" stroke-width="2"></polygon>
+                  <text x="220" y="603">未知面積が</text>
+                  <text x="220" y="620">0.5m²以下?</text>
+
+                  <rect x="520" y="585" width="300" height="50" rx="8" fill="rgba(0,204,255,.16)" stroke="rgb(0,140,190)" stroke-width="1.5"></rect>
+                  <text x="670" y="605" font-weight="600">OPENING</text>
+                  <text x="670" y="622" font-size="10.5" fill="currentColor" opacity=".7">無ければ完了veto→再武装 or 完了</text>
+
+                  <polygon points="220,705 370,760 220,815 70,760" fill="none" stroke="currentColor" stroke-width="2"></polygon>
+                  <text x="220" y="753">soft defer</text>
+                  <text x="220" y="770">解禁待ち?</text>
+
+                  <rect x="520" y="735" width="300" height="50" rx="8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 4"></rect>
+                  <text x="670" y="755" font-weight="600">待機</text>
+                  <text x="670" y="772" font-size="10.5" fill="currentColor" opacity=".7">解禁まで駆動せず次サイクルへ</text>
+
+                  <polygon points="220,855 370,910 220,965 70,910" fill="none" stroke="currentColor" stroke-width="2"></polygon>
+                  <text x="220" y="903">骨格端点</text>
+                  <text x="220" y="920">(Micro)がある?</text>
+
+                  <rect x="520" y="885" width="300" height="50" rx="8" fill="rgba(255,214,0,.20)" stroke="rgb(160,130,0)" stroke-width="1.5"></rect>
+                  <text x="670" y="905" font-weight="600">MICRO</text>
+                  <text x="670" y="922" font-size="10.5" fill="currentColor" opacity=".7">塗り残しポケットの端点へ移動</text>
+
+                  <polygon points="220,1005 370,1060 220,1115 70,1060" fill="none" stroke="currentColor" stroke-width="2"></polygon>
+                  <text x="220" y="1053">開口部フォール</text>
+                  <text x="220" y="1070">バックがある?</text>
+
+                  <rect x="520" y="1035" width="300" height="50" rx="8" fill="rgba(0,204,255,.16)" stroke="rgb(0,140,190)" stroke-width="1.5"></rect>
+                  <text x="670" y="1055" font-weight="600">OPENING</text>
+                  <text x="670" y="1072" font-size="10.5" fill="currentColor" opacity=".7">未知が残っても完了は宣言しない</text>
+
+                  <polygon points="220,1155 370,1210 220,1265 70,1210" fill="none" stroke="currentColor" stroke-width="2"></polygon>
+                  <text x="220" y="1203">NO_GATESが</text>
+                  <text x="220" y="1220">4回連続?</text>
+
+                  <rect x="520" y="1185" width="300" height="50" rx="8" fill="rgba(140,140,150,.22)" stroke="currentColor" stroke-width="1.5"></rect>
+                  <text x="670" y="1205" font-weight="600">探索完了</text>
+                  <text x="670" y="1222" font-size="10.5" fill="currentColor" opacity=".7">ストール終了</text>
+
+                  <rect x="70" y="1310" width="300" height="60" rx="8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 4"></rect>
+                  <text x="220" y="1335">待機</text>
+                  <text x="220" y="1352" font-size="10.5" opacity=".7">(次サイクルで再評価。退避を挟む場合あり)</text>
+                </g>
+              </svg>
+              <figcaption>下の表と同じ判断を分岐図で表現。色は前スライドの凡例・実際のマーカー色と対応する。</figcaption>
+            </figure>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:16px;">
+          <div class="panel-head"><span class="num">8</span><h3>上のフローチャートの言葉での説明</h3></div>
+          <div class="panel-body">
+            <div class="tscroll">
+              <table class="ftable">
+                <tr><th class="step">#</th><th class="cond">条件</th><th>処理</th><th class="out">RVizでの表示</th></tr>
+                <tr><td class="step">0</td><td>毎サイクル（<code>/map</code> 受信ごと）</td><td>未閉鎖境界を測り、到達可能マスクを作る。以降の<b>全ゴール源</b>をこのマスク上に制約する</td><td><span class="out-none">—</span></td></tr>
+                <tr><td class="step">1</td><td>半径2m内で新規面積が伸びない試行が6回連続、または直近15件の平均が閾値未満</td><td>探索完了を宣言（ローカル／グローバルの2種の停滞判定）</td><td><span class="out-none">マーカー消滅</span></td></tr>
+                <tr><td class="step">2</td><td>継続する場合</td><td>GVD骨格を生成 → ゲート検出 → 退役済み・クールダウン中を除外</td><td><span class="out-none">緑球／灰球が更新</span></td></tr>
+                <tr><td class="step">3</td><td>エリア内にゲートがある</td><td>そのゲートのウェイポイントをNav2へ送る</td><td><span class="out-tag"><span class="vdot" style="background:rgb(0,255,51)"></span>GATE</span></td></tr>
+                <tr><td class="step">4</td><td>エリア内にゲート無し＋<b>エリア外</b>に選べるゲートあり</td><td>エリアを解放して乗り換える（灰色のまま放置しない）</td><td><span class="out-none">青い円が移動</span></td></tr>
+                <tr><td class="step">5</td><td>エリア内にゲート無し＋未閉鎖境界は残る</td><td>境界が最も濃い「立てる点」を直接ゴールにする</td><td><span class="out-tag"><span class="vdot" style="background:rgb(255,0,255)"></span>OPEN-BOUNDARY</span></td></tr>
+                <tr><td class="step">6</td><td>ゲート0件＋未知面積 ≤ 0.5m²</td><td>開口部フォールバックを試す。無ければ完了veto判定へ</td><td><span class="out-tag"><span class="vdot" style="background:rgb(0,204,255)"></span>OPENING</span></td></tr>
+                <tr><td class="step">7</td><td>ゲート0件＋soft defer解禁待ち</td><td>駆動せず待機し、次サイクルで再評価する</td><td><span class="out-none">変化なし</span></td></tr>
+                <tr><td class="step">8</td><td>ゲート0件＋未知面積 &gt; 0.5m²</td><td>骨格端点（塗り残しポケットの視点）へ移動</td><td><span class="out-tag"><span class="vdot" style="background:rgb(255,255,0)"></span>MICRO</span></td></tr>
+                <tr><td class="step">9</td><td>Micro・開口部ともに無し</td><td>盲点スキャン／開けた場所へ退避して視界を作り直す</td><td><span class="out-none">—</span></td></tr>
+                <tr><td class="step">10</td><td>ゲート0件が4回連続</td><td>ストール扱いで探索を終了する</td><td><span class="out-none">マーカー消滅</span></td></tr>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid" style="margin-top:16px;">
+          <div class="panel">
+            <div class="panel-head"><span class="num">9</span><h3>到達後の処理（GATE_THROUGH）</h3></div>
+            <div class="panel-body">
+              <div class="tscroll">
+                <table class="ftable" style="min-width:0;">
+                  <tr><th class="cond">条件</th><th>処理</th></tr>
+                  <tr><td>ウェイポイント到達＋ゲート中心まで距離が残る</td><td><b>レグA</b>: ゲート中心まで前進</td></tr>
+                  <tr><td>LOSで未探索方位が1.5m以上見通せる</td><td><b>レグB</b>: その方位へ1.0m前進</td></tr>
+                  <tr><td>前方ブロックが<b>0.3秒連続</b>で確定</td><td><code>blocked</code> → 失敗扱い</td></tr>
+                  <tr><td>変位が伸びない／30秒超過</td><td><code>stalled</code> / <code>timeout</code> → 失敗扱い</td></tr>
+                  <tr><td>上記いずれかで終了後</td><td>その場旋回で周囲スキャン（scan_after）</td></tr>
+                </table>
+              </div>
+              <div class="note">単発の偽近接点でゲートを潰さないため、ブロック確定には連続性を要求している。</div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><span class="num">10</span><h3>結果の記帳＝マーカーの変化</h3></div>
+            <div class="panel-body">
+              <ul>
+                <li><b>到達＋通過成功</b> → hard retire。<b>緑球が消える</b>（同じ場所へ二度と行かない）</li>
+                <li><b>失敗1回目</b> → soft defer。3サイクル後に再挑戦（一時的に候補から外れる）</li>
+                <li><b>失敗2回で上限</b> → hard retire＋ペナルティ加点。<b>再武装しても点数は消えない</b></li>
+                <li><b>OPEN-BOUNDARY</b> → 到達可否によらず消化済み。粘って再提案しない</li>
+                <li><b>完了判定でも境界が残る</b> → 再武装して探索を続行（完了veto）</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="keyidea" style="margin-top:16px;">
+          <div class="tag">WHY</div>
+          <p><b>ゲートは「通路の候補」であって「通れる保証」ではない。</b>だから失敗の記帳（退役・ペナルティ・再武装）まで含めて初めて探索が終わる。RVizで緑球が減っていく様子は、そのまま「試して潰した候補の履歴」になっている。</p>
+        </div>
+      </div>
+
+      <!-- SLIDE 5: 人追従機能（FOLLOW #1-2） -->
+      <div class="slide">
+        <div class="slide-title-wrap">
+          <span class="track-chip follow"><span class="dot2"></span>人追従トラック — FOLLOW</span>
+          <div class="slide-title"><h2>人追従機能</h2><span class="n">WHAT RUNS DURING FOLLOW</span></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><span class="num">1</span><h3>人追従モードで動く層</h3></div>
+          <div class="panel-body">
+            <div class="stackd">
+              <div class="row"><div class="lbl">LAYER 3<b>AI頭脳</b></div>
+                <div class="chips">
+                  <span class="chip active">ai_mode_manager</span>
+                  <span class="chip active">YOLO / YOLO-World</span>
+                  <span class="chip dim">LLM</span><span class="chip dim">Mapping(探索ロジック)</span>
+                </div></div>
+              <div class="connector">↑</div>
+              <div class="row"><div class="lbl">LAYER 2<b>自律</b></div>
+                <div class="chips">
+                  <span class="chip active">Nav2</span>
+                  <span class="chip active">AMCL</span>
+                  <span class="chip dim">SLAM Toolbox</span><span class="chip dim">AprilTag+tag_map_recorder</span>
+                </div></div>
+              <div class="connector">↑</div>
+              <div class="row"><div class="lbl">LAYER 1<b>ハードウェア</b></div>
+                <div class="chips">
+                  <span class="chip active">wheel_odom+IMU→EKF</span>
+                  <span class="chip active">pico_bridge</span>
+                  <span class="chip active">GUARD</span>
+                </div></div>
+            </div>
+            <div class="chipnote">
+              <span class="k"><span class="sw5" style="background:var(--teal-soft);border:1.5px solid var(--teal);"></span>使用中</span>
+              <span class="k"><span class="sw5" style="background:var(--panel-2);border:1.5px solid var(--ink);opacity:.5;"></span>未使用（グレーアウト＝取り消し線）</span>
+            </div>
+            <ul>
+              <li><b>Nav2・AMCLを使う。</b>既存マップ上で自己位置推定しながら追従ゴールへナビゲート</li>
+              <li><b>SLAM Toolbox・タグ登録は使わない。</b>地図は作らず、既存マップ（またはローカルodomフレーム）で追従する</li>
+              <li><b>LLM・Mapping探索ロジックは休止。</b>ai_mode_managerがLifecycleを排他制御するため、追従中は同時に動かない</li>
+              <li><b>ハードウェア層は地図作成と共通。</b>駆動・安全ゲートはどちらのモードでも同じ経路を通る</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:16px;">
+          <div class="panel-head"><span class="num">2</span><h3>知覚（Perception）</h3></div>
+          <div class="panel-body">
+            <div class="twin">
+              <div class="col"><h4>YOLO — 人物追従</h4>
+                <ul><li>YOLOv8+Depth Anything V2</li><li>自前 IouTracker で ID採番</li><li>sticky freeze で誤検出除外</li></ul></div>
+              <div class="col"><h4>YOLO-World — 物体探索</h4>
+                <ul><li>自然言語で対象を指定</li><li>CLIPは色を無視→HSV検証</li><li>LLMが日本語→英語へ翻訳</li></ul></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SLIDE 6: 追従の状況（FOLLOW #3-5） -->
+      <div class="slide">
+        <div class="slide-title-wrap">
+          <span class="track-chip follow"><span class="dot2"></span>人追従トラック — FOLLOW</span>
+          <div class="slide-title"><h2>追従の状況</h2><span class="n">FOLLOW STATUS — VISUALIZED VIA RVIZ</span></div>
+        </div>
+        <p class="desc" style="margin-bottom:16px;">追従中、ロボットが「誰を・どこで捕まえていて、今どのリカバリー段階にいるか」は、RViz上のマーカーと状態ラベルとして表れる。ここでも操作方法ではなく、<b>追従がどういう状態にあるか</b>の読み解き方を説明する。</p>
+
+        <div class="panel">
+          <div class="panel-head"><span class="num">3</span><h3>追従中の状態（再現イラスト）</h3></div>
+          <div class="panel-body">
+            <div class="mockup-frame">
+              <div class="mockup-titlebar">
+                <span class="dot3" style="background:#ff5f57"></span>
+                <span class="dot3" style="background:#febc2e"></span>
+                <span class="dot3" style="background:#28c840"></span>
+              </div>
+              <svg viewBox="0 0 800 420" role="img" aria-label="追従中のRViz画面を再現したイラスト。ロボット・breadcrumb軌跡・人物マーカー・現在のゴールを配置した図">
+                <defs>
+                  <marker id="mk2-white" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M0,0 L10,5 L0,10 z" fill="#ffffff"></path>
+                  </marker>
+                </defs>
+                <rect x="0" y="0" width="800" height="420" fill="#0a0a0a"></rect>
+                <rect x="60" y="40" width="680" height="340" rx="4" fill="#eef0ee" stroke="#050505" stroke-width="6"></rect>
+
+                <polyline points="150,320 300,280 420,220 500,190" fill="none" stroke="#ff9100" stroke-width="3" stroke-dasharray="8 6"></polyline>
+
+                <polygon points="150,320 123,307 123,333" fill="#ff7a1a" stroke="#050505" stroke-width="1.5"></polygon>
+
+                <circle cx="500" cy="190" r="16" fill="none" stroke="#050505" stroke-width="1.5" stroke-dasharray="3 3"></circle>
+                <circle cx="500" cy="190" r="9" fill="#14e13c" stroke="#053d13" stroke-width="1"></circle>
+                <text x="500" y="163" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="12" font-weight="700" fill="#0e8a76">GOAL</text>
+
+                <ellipse cx="560" cy="182" rx="15" ry="24" fill="#7ec8ff" stroke="#053d5c" stroke-width="1.5"></ellipse>
+                <circle cx="560" cy="148" r="11" fill="#7ec8ff" stroke="#053d5c" stroke-width="1.5"></circle>
+                <text x="590" y="152" font-family="'IBM Plex Mono',monospace" font-size="11" fill="#7ec8ff">ID 12</text>
+              </svg>
+            </div>
+            <div class="mockup-note">※ 実機スクリーンショットではなく再現イラスト。後日、実機のRViz画面に差し替え予定。色・形は下のパネルの凡例と対応している。</div>
+          </div>
+        </div>
+
+        <div class="grid" style="margin-top:16px;">
+          <div class="panel">
+            <div class="panel-head"><span class="num">4</span><h3>表示されるマーカー</h3></div>
+            <div class="panel-body">
+              <div class="legend">
+                <div class="lg">
+                  <div class="sw"><div class="sw-sphere person"></div></div>
+                  <div class="t"><b>体＋頭のマーカー</b><em>follow/person_marker — MarkerArray, goal_frame</em>追従対象の現在位置。<span class="alert">表示専用</span>で制御には使わない（P8-16）</div>
+                </div>
+                <div class="lg">
+                  <div class="sw"><span class="sw-arrow orange">┅</span></div>
+                  <div class="t"><b>オレンジの破線</b><em>follow/person_trail — Path, goal_frame</em>対象の実測位置を記録したbreadcrumb軌跡。Tier1はこの上を先回りする</div>
+                </div>
+                <div class="lg">
+                  <div class="sw"><div class="sw-sphere"></div></div>
+                  <div class="t"><b>緑の点＋「GOAL」ラベル</b><em>object_tracking/goal_pose</em>現在のゴール。trail_follow既定trueのため、対象そのものではなく軌跡上の手前の点に置く</div>
+                </div>
+                <div class="lg">
+                  <div class="sw"><span class="sw-text">ID</span></div>
+                  <div class="t"><b>ID表示</b><em>IouTracker が採番</em>ロックオン/解除は <code>/target_id</code> トピックで明示指定できる</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><span class="num">5</span><h3>リカバリー状態のラベル</h3></div>
+            <div class="panel-body">
+              <div class="vocab">
+                <div class="vrow"><span class="vdot" style="background:rgb(0,255,51)"></span><span class="vname">FOLLOWING</span><span class="vdesc">対象を視認して通常追従中</span></div>
+                <div class="vrow"><span class="vdot" style="background:rgb(255,255,0)"></span><span class="vname">LOOK</span><span class="vdesc">見渡し一時停止（look_pause_sec）</span></div>
+                <div class="vrow"><span class="vdot" style="background:rgb(255,153,0)"></span><span class="vname">TIER1</span><span class="vdesc">軌道予測＝breadcrumb先回り</span></div>
+                <div class="vrow"><span class="vdot" style="background:rgb(0,204,255)"></span><span class="vname">TIER2</span><span class="vdesc">フロンティア探索（地図作成と共有ロジック）</span></div>
+                <div class="vrow"><span class="vdot" style="background:rgb(178,178,178)"></span><span class="vname">GIVEUP</span><span class="vdesc">探索タイムアウトで諦め、安全停止</span></div>
+              </div>
+              <div class="note"><code>LOCALIZATION_LOST</code> / <code>NAV_UNHEALTHY</code> は別系統の安全ゲート状態（次スライド参照）。<code>follow/recovery_state</code> トピックで確認できる。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SLIDE 7: 追従の仕組み（FOLLOW #6-10） -->
+      <div class="slide">
+        <div class="slide-title-wrap">
+          <span class="track-chip follow"><span class="dot2"></span>人追従トラック — FOLLOW</span>
+          <div class="slide-title"><h2>追従の仕組み</h2><span class="n">HOW FOLLOWING WORKS, END TO END</span></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><span class="num">6</span><h3>全体の流れ（追従開始 → ロスト → 再捕捉）</h3></div>
+          <div class="panel-body">
+            <div class="vflow">
+              <div class="vstep" data-n="1"><b>追従開始</b><span>YOLO/YOLO-Worldで人物検出、自前IouTrackerがtracking IDを採番</span></div>
+              <div class="vstep" data-n="2"><b>対象をロック</b><span>初回検出では確定せず接近。到達後に再測定し、誤差0.3m以内で確定（capture_verify、最大1回リトライ）</span></div>
+              <div class="vstep" data-n="3"><b>追従ゴールを生成</b><span>trail_follow既定true。breadcrumb上でdist_offset手前の点をゴールにする</span></div>
+              <div class="vstep" data-n="4"><b>ロスト検知</b><span>対象の連続非検出、または知覚メッセージが2.0秒完全途絶で検知</span></div>
+              <div class="vstep" data-n="5"><b>LOOK（見渡し一時停止）</b><span>look_pause_sec 既定3.0秒。視線がLiDARで塞がれていればスキップ</span></div>
+              <div class="vstep" data-n="6"><b>TIER1（軌道予測）</b><span>breadcrumb上を軌跡先回り。Nav2の結果が返るたび前進するか終わる</span></div>
+              <div class="vstep loop" data-n="7"><b>TIER2（フロンティア探索）</b><span>予測ゴール到達で移行。GVD/Frontierまたは部屋パトロールへ（地図作成と共有ロジック、詳細は前スライド）</span></div>
+              <div class="vstep" data-n="8"><b>再検出</b><span>連続する検出フレーム数（既定2）で再捕捉を確定。非検出フレームは数えずリセットもしない</span></div>
+              <div class="vstep handoff" data-n="9"><b>FOLLOWINGへ復帰</b><span>リカバリー状態をリセットし追従を再開</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:16px;">
+          <div class="panel-head"><span class="num">7</span><h3>同じ流れを状態遷移図で</h3></div>
+          <div class="panel-body">
+            <figure class="flowfig">
+              <svg viewBox="0 0 900 400" role="img" aria-label="人追従のリカバリー状態遷移図。FOLLOWING、LOOK、TIER1、TIER2、GIVEUPの5状態と遷移条件を示す">
+                <defs>
+                  <marker id="fs-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
+                  </marker>
+                </defs>
+
+                <g font-family="'IBM Plex Sans JP',sans-serif" font-size="14" text-anchor="middle" fill="currentColor">
+                  <rect x="30" y="140" width="160" height="70" rx="10" fill="rgba(0,255,51,.14)" stroke="rgb(20,150,60)" stroke-width="2"></rect>
+                  <text x="110" y="180" font-weight="700">FOLLOWING</text>
+
+                  <rect x="250" y="140" width="160" height="70" rx="10" fill="rgba(255,214,0,.18)" stroke="rgb(160,130,0)" stroke-width="2"></rect>
+                  <text x="330" y="180" font-weight="700">LOOK</text>
+
+                  <rect x="470" y="140" width="160" height="70" rx="10" fill="rgba(255,140,0,.16)" stroke="rgb(190,100,0)" stroke-width="2"></rect>
+                  <text x="550" y="180" font-weight="700">TIER1</text>
+
+                  <rect x="690" y="140" width="160" height="70" rx="10" fill="rgba(0,204,255,.16)" stroke="rgb(0,140,190)" stroke-width="2"></rect>
+                  <text x="770" y="180" font-weight="700">TIER2</text>
+
+                  <rect x="690" y="280" width="160" height="60" rx="10" fill="rgba(140,140,150,.22)" stroke="currentColor" stroke-width="2"></rect>
+                  <text x="770" y="315" font-weight="700">GIVEUP</text>
+
+                  <g stroke="currentColor" fill="none" stroke-width="2">
+                    <line x1="190" y1="175" x2="248" y2="175" marker-end="url(#fs-arrow)"></line>
+                    <line x1="410" y1="175" x2="468" y2="175" marker-end="url(#fs-arrow)"></line>
+                    <line x1="630" y1="175" x2="688" y2="175" marker-end="url(#fs-arrow)"></line>
+                    <line x1="770" y1="210" x2="770" y2="278" marker-end="url(#fs-arrow)"></line>
+                  </g>
+                  <g font-size="11" fill="currentColor" opacity=".8">
+                    <text x="219" y="165">ロスト確定</text>
+                    <text x="439" y="160">3.0s経過</text>
+                    <text x="439" y="174">(LOS遮断なら即時)</text>
+                    <text x="659" y="165">予測ゴール到達</text>
+                    <text x="820" y="248">120秒</text>
+                    <text x="820" y="261">タイムアウト</text>
+                  </g>
+
+                  <g stroke="currentColor" stroke-width="1.6" fill="none" stroke-dasharray="5 4" opacity=".85">
+                    <path d="M690,185 C 500,255 300,335 110,213" marker-end="url(#fs-arrow)"></path>
+                    <path d="M110,140 C 300,50 550,50 688,140" marker-end="url(#fs-arrow)"></path>
+                  </g>
+                  <g font-size="11" fill="currentColor" opacity=".8">
+                    <text x="400" y="315">連続検出2フレームで復帰</text>
+                    <text x="400" y="45">breadcrumbなし→TIER2へ直行</text>
+                  </g>
+                </g>
+              </svg>
+              <figcaption>下の表は各遷移の条件・実際のパラメータ値をまとめたもの。TIER2の内部ロジックは「地図作成の仕組み」で見たフローチャートと同一クラス（GvdExplorer）を使う。</figcaption>
+            </figure>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:16px;">
+          <div class="panel-head"><span class="num">8</span><h3>上の状態遷移図の言葉での説明</h3></div>
+          <div class="panel-body">
+            <div class="tscroll">
+              <table class="ftable" style="min-width:0;">
+                <tr><th class="cond">遷移・条件</th><th>処理</th></tr>
+                <tr><td>知覚メッセージが<b>2.0秒</b>完全途絶</td><td>発生源非依存で即座に安全停止（P8-13）</td></tr>
+                <tr><td>FOLLOWING → ロスト確定（breadcrumbあり）</td><td>LOOK（見渡し一時停止）へ。<code>look_pause_sec</code> 既定3.0秒</td></tr>
+                <tr><td>LOOK中に視線がLiDARで塞がれている</td><td>見渡しをスキップして即座にTIER1へ</td></tr>
+                <tr><td>ロスト確定時にbreadcrumbが無い</td><td>LOOK/TIER1を飛ばしTIER2へ直行</td></tr>
+                <tr><td>TIER1 → 予測ゴールに到達</td><td>breadcrumb消化後、TIER2（探索）へ移行</td></tr>
+                <tr><td>TIER2の探索ロジック</td><td>GVD/Frontier/Patrol。mapping専用パラメータは渡さないため内部既定のまま動作</td></tr>
+                <tr><td>連続する検出フレーム数が<b>既定2</b></td><td>再捕捉を確定。非検出フレームは数えずリセットもしない</td></tr>
+                <tr><td>TIER2探索が<b>120秒</b>（運用値）超過</td><td>GIVEUPへ。安全停止</td></tr>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid" style="margin-top:16px;">
+          <div class="panel">
+            <div class="panel-head"><span class="num">9</span><h3>安全ゲート（3層）</h3></div>
+            <div class="panel-body">
+              <div class="gates">
+                <div class="gate"><span class="id">A</span><div class="t"><b>AMCL 共分散発散</b>3回連続で検知→停止→自力復帰を試行</div></div>
+                <div class="gate"><span class="id">B</span><div class="t"><b>GUARD 前進コリドー</b>モーター出口で直接ブロック（発生源非依存）</div></div>
+                <div class="gate"><span class="id">C</span><div class="t"><b>Nav2 連続REJECT</b>バックオフの上、諦めて安全停止</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span class="num">10</span><h3>主要パラメータ</h3></div>
+            <div class="panel-body">
+              <table class="ptable">
+                <tr><td>直進上限速度</td><td>0.10 m/s</td></tr>
+                <tr><td>その場回頭 最小角速度</td><td>0.235 rad/s</td></tr>
+                <tr><td>GUARD 停止 / 減速距離</td><td>7.5cm / 17.5cm</td></tr>
+                <tr><td>知覚メッセージ途絶タイムアウト</td><td>2.0 s</td></tr>
+                <tr><td>AIモード切替 メモリゲート</td><td>2500 MB</td></tr>
+                <tr><td>ロスト直後の見渡しポーズ</td><td>3.0 s</td></tr>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SLIDE 8: 駆動系とまとめ（共通・OVERVIEW #2-3） -->
+      <div class="slide">
+        <div class="slide-title-wrap">
+          <span class="track-chip overview"><span class="dot2"></span>共通基盤 — SHARED</span>
+          <div class="slide-title"><h2>駆動系とまとめ</h2><span class="n">DRIVE, FUSION &amp; TAKEAWAYS</span></div>
+        </div>
+        <div class="grid">
+          <div class="panel">
+            <div class="panel-head"><span class="num">2</span><h3>センサーフュージョン・駆動</h3></div>
+            <div class="panel-body">
+              <div class="flow">
+                <div class="box">wheel_odom<br>(vx)</div><div class="box">IMU<br>(vyaw)</div>
+                <div class="arw">→</div><div class="box">EKF</div><div class="arw">→</div><div class="box">odom</div>
+              </div>
+              <ul><li>レーザーオドメトリで片輪衝突・引っかかりを検知</li><li>左右非対称なモーター死帯を条件付き補償</li><li>ZUPTで長時間静止時のヨー誤差を約35倍抑制</li></ul>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span class="num">3</span><h3>AIモード排他制御</h3></div>
+            <div class="panel-body">
+              <ul><li>重いAIノード(LLM/YOLO/YOLO-World/Mapping)を1つだけ常駐</li><li>deactivate→cleanup→configure→activateで安全に切替</li><li>drop_cachesをon_configureで実行しVRAMを確保</li></ul>
+            </div>
+          </div>
+        </div>
+        <div class="takeaways">
+          <div>
+            <h3>KEY TAKEAWAYS</h3>
+            <ul>
+              <li>「全消化」ではなく「見せられる背骨」を1本通す設計思想</li>
+              <li>知覚・追従・安全・駆動を疎結合な3層＋Lifecycle排他制御で構成</li>
+              <li>ロストは1回のイベントではなく Tier1/Tier2 の段階的リカバリーで扱う</li>
+              <li>安全は単一障害点を作らない3層ゲートで担保する</li>
+            </ul>
+          </div>
+          <div class="quote">
+            <p>"1本の追従動画を、止めずに撮り切れる設計にする。"</p>
+            <div class="by">— 開発方針 / CLAUDE.md §1.1</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="controller">
+    <div class="arrows"><button id="prevBtn" type="button" aria-label="前のスライド">← PREV</button></div>
+    <div class="info" id="infoText"><b>1/8 概要</b><br>Next: 2/8 地図作成機能</div>
+    <div class="dots" id="dots"></div>
+    <div class="arrows"><button id="nextBtn" type="button" aria-label="次のスライド">NEXT →</button></div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  var titles = [
+    "概要",
+    "地図作成機能",
+    "地図の状況",
+    "地図作成の仕組み",
+    "人追従機能",
+    "追従の状況",
+    "追従の仕組み",
+    "駆動系とまとめ"
+  ];
+  var track = document.getElementById('track');
+  var slides = track.children;
+  var total = slides.length;
+  var idx = 0;
+
+  var dotsWrap = document.getElementById('dots');
+  for (var i = 0; i < total; i++){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-label', (i+1) + '枚目へ');
+    b.addEventListener('click', (function(n){ return function(){ go(n); }; })(i));
+    dotsWrap.appendChild(b);
+  }
+
+  var curNum = document.getElementById('curNum');
+  var infoText = document.getElementById('infoText');
+  var prevBtn = document.getElementById('prevBtn');
+  var nextBtn = document.getElementById('nextBtn');
+
+  function render(){
+    track.style.transform = 'translateX(-' + (idx * 100) + '%)';
+    curNum.textContent = idx + 1;
+    var dotBtns = dotsWrap.children;
+    for (var i = 0; i < dotBtns.length; i++){
+      dotBtns[i].setAttribute('aria-current', i === idx ? 'true' : 'false');
+    }
+    var next = idx < total - 1 ? (idx+2) + '/' + total + ' ' + titles[idx+1] : null;
+    infoText.innerHTML = '<b>' + (idx+1) + '/' + total + ' ' + titles[idx] + '</b>' +
+      (next ? '<br>Next: ' + next : '<br>— 以上で全' + total + '枚 —');
+    prevBtn.disabled = idx === 0;
+    nextBtn.disabled = idx === total - 1;
+  }
+
+  function go(n){
+    idx = Math.max(0, Math.min(total - 1, n));
+    render();
+  }
+
+  prevBtn.addEventListener('click', function(){ go(idx - 1); });
+  nextBtn.addEventListener('click', function(){ go(idx + 1); });
+
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'ArrowLeft') go(idx - 1);
+    if (e.key === 'ArrowRight') go(idx + 1);
+  });
+
+  var startX = null;
+  var stage = document.querySelector('.stage');
+  stage.addEventListener('touchstart', function(e){ startX = e.touches[0].clientX; }, {passive:true});
+  stage.addEventListener('touchend', function(e){
+    if (startX === null) return;
+    var dx = e.changedTouches[0].clientX - startX;
+    if (Math.abs(dx) > 50){ go(dx < 0 ? idx + 1 : idx - 1); }
+    startX = null;
+  }, {passive:true});
+
+  render();
+})();
+</script>
+</body>
+</html>

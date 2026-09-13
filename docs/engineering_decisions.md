@@ -719,6 +719,16 @@ IMU側も加速度スパイクを示したため発火せず、laser 基準の�
 
 → 詳細 → CLAUDE.md §6.9（EKF不採用の判断は N24-68c、スリップ検知第3軸としての実装・実機投入は N24-68d）
 
+> **その後の変化（本Issueの構成は現在のものではない）**: EKFへ統合しないという判断
+> （N24-68c）は今も有効だが、上記コード例 `evaluate_translation_slip_axis()`（N24-68d、
+> 瞬時速度比較による第3軸）は**N24-70で退役済み**。しきい値0.05 m/sが推定器自身の
+> 分解能（σ≈0.058 m/s）より細かく、かつゲート閉中の沈黙を「静止の証言」と読み違えて
+> いたため。後継は「秒オーダーの窓内変位比・尤度比で持続的な拘束を検知する」拘束検知
+> （`TranslationStuckDetector`→`LikelihoodStuckDetector`、N24-70/N24-73）で、
+> `laser_odom_node` は現在 `laser_odom/motion_evidence`（対数尤度比）をpublishし、
+> 判定は `wheel_odom_node` 側に持つ。現行の値・構成は CLAUDE.md §6.9（N24-70/N24-72/
+> N24-73）を参照。
+
 ---
 
 # 参考: 障害分析ドキュメント一覧

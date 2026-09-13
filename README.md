@@ -4,8 +4,9 @@
 
 > **AIで賢くなるロボットを、現場で安定稼働させる。**
 >
-> DBA / システム運用 / 可観測性のバックグラウンドを持つエンジニアが、
-> ロボティクスに「運用視点」を持ち込むために個人で開発したプラットフォーム。
+> Jetson Orin Nano 上で **人追従 → 見失う → 軌跡から先回り → 自律探索 → 再捕捉** までを
+> 自律で回す実機ロボット。「動くデモ」で終わらせず、可観測性・安全設計・インシデント記録まで
+> 通した **運用視点の physical AI** です。
 
 <!-- ロボット実機の写真（正面 + 斜めの2枚構成）。 -->
 <p align="center">
@@ -15,31 +16,57 @@
 
 ---
 
+## Why This Project
+
+ロボットそのものが目的ではありません。**「運用・信頼性」「AI の実務適用」「physical AI の実機実装」の
+3つが1人に揃っていること**を示すための証拠として作っています。
+
+| よく居る人 | 私の裏付け |
+|---|---|
+| **運用・信頼性が分かる**（SRE / DBA / インフラ） | Oracle DBA・インフラ運用 10年以上。20名規模の DBA チームリーダー。障害対応・性能管理・運用自動化が主戦場 |
+| **AI を実務で使える** | 本業で IT 保守運用の生産性向上を AI で PoC 〜 実導入 |
+| **physical AI を実機で組める** | 本プロジェクト。Jetson + ROS2 + Nav2 + YOLO + LLM をゼロから統合し、実機で走らせている |
+
+3つそれぞれの専門家は大勢いますが、**交差点に立つ人はほとんどいません。**
+「AI を試す人」でも「ロボットを作る人」でもなく、**エッジ AI を "本番運用" まで持っていける** ——
+このリポジトリはその立ち位置の証拠です。
+
+だから以下も「何ができるか」だけでなく、**どう壊れ、どう検知し、どう直したか**を同じ比重で書いています。
+
+---
+
 ## Demo
 
 <p align="center">
   <a href="https://www.youtube.com/shorts/wOj_O3pmqlM">
-    <img src="https://img.youtube.com/vi/wOj_O3pmqlM/hqdefault.jpg" alt="人追従デモ" width="45%">
+    <img src="https://img.youtube.com/vi/wOj_O3pmqlM/hqdefault.jpg" alt="人追従デモ" width="30%">
   </a>
   <a href="https://www.youtube.com/shorts/eDrZ-v9ciB8">
-    <img src="https://img.youtube.com/vi/eDrZ-v9ciB8/hqdefault.jpg" alt="地図なし人追従デモ" width="45%">
+    <img src="https://img.youtube.com/vi/eDrZ-v9ciB8/hqdefault.jpg" alt="地図なし人追従デモ" width="30%">
+  </a>
+  <a href="https://www.youtube.com/shorts/eqMXYGakyOI">
+    <img src="https://img.youtube.com/vi/eqMXYGakyOI/hqdefault.jpg" alt="音声対話・状況説明デモ" width="30%">
   </a>
 </p>
 
 <p align="center">
-  <sub><b>左:</b> 人追従（YOLO + 深度推定 + Nav2）　｜　<b>右:</b> 地図なし人追従（<code>local</code> モード / odom フレーム、事前地図なしで動作）</sub>
+  <sub><b>左:</b> 人追従（YOLO + 深度推定 + Nav2）　｜　<b>中:</b> 地図なし人追従（<code>local</code> モード / odom フレーム、事前地図なしで動作）　｜　<b>右:</b> 呼びかけ〜状況説明（STT + LLM + Cloud VLM）</sub>
 </p>
 
 <p align="center">▶ その他の動画は <a href="https://www.youtube.com/@toyof-robo">YouTubeチャンネル</a> で公開中</p>
 
 ### デモシナリオ
 
+以下は**全機能を1本に通したときのシナリオ**です。上の3本の動画のうち左・中が「承」の追従パートを
+別々の条件——地図あり／地図なし——で撮ったもの、右が「起」〜「結」（呼びかけから状況説明まで）を
+1本で撮ったものです。「転」（自然言語での物体探索）はまだ動画化できていません。
+
 | シーン | 操作 | ロボットの動作 | 使用技術 |
 |---|---|---|---|
 | 起 | 「ヘイロボ」 | 「はい。何の処理をしましょうか？」 | STT + LLM |
 | 承 | 「人についてきて」 | 追従開始 → 障害物を自律回避 → 追従継続 | YOLO + Depth + Nav2 |
 | 転 | 「くまのぬいぐるみを探して」 | 自律探索 →「見つかりました」 | YOLO-World |
-| 結 | 「何が見える？」 | 「男性が携帯を手に...」 | Cloud VLM (Gemini) |
+| 結 | 「何が見える？」 | 部屋にいる人物を検出し、状況を自然文で説明 | Cloud VLM (Gemini) |
 
 > 全処理は Jetson Orin Nano (8GB) 上でリアルタイム実行（VLMのみクラウド）
 
@@ -63,16 +90,23 @@
 
 ## Key Numbers
 
+**性能**
+
 | Metric | Value | Condition |
 |---|---|---|
 | YOLO推論レイテンシ | 70〜128 ms（平均 約10Hz） | YOLOv8s, TensorRT FP16, 640x480, Depth Anything V2 と同時稼働 |
 | Depth推論レイテンシ | 90 ms〜1.3 s（平均 2〜3.6Hz） | Depth Anything V2 ViT-S, TensorRT, YOLOv8s と同時稼働（GPU競合時にばらつき大） |
 | LLM初回応答（コールドスタート） | 約 51.0 秒 | Qwen2.5 1.5B, llama.cpp GPU offload, context_len=1024, バックグラウンドウォームアップ未完了時（サーバ起動〜ヘルスチェック成功までは別途62.5秒） |
 | LLM応答（ウォームアップ済） | 約 1.16 秒 | 同上 |
+
+**規模・検証可能性**
+
+| Metric | Value | 備考 |
+|---|---|---|
 | カスタムROS2パッケージ数 | 11 | `src/toyof_robot_*` |
-| 総コード行数（自作部分） | 約 40,900 行 | `src/toyof_robot_*`（Python 約37,800 + YAML/C++/XML 等 約3,100、コメント・docstring・空行除く、264 files） |
-| ROS2 非依存の純ロジックモジュール | 40 | `*_logic.py`。実機・コンテナなしで `pytest` 可能 |
-| 自動テスト | 1,617 件 / 65 ファイル | 上記の純ロジック中心。lint 自動テスト（flake8 / pep257 / copyright）は除く |
+| ROS2 非依存の純ロジックモジュール | 43 | `*_logic.py`。実機・コンテナなしで `pytest` 可能（→ [Show Me the Code](#show-me-the-code)） |
+| 自動テスト | 約1,870 件 / 70 ファイル | 上記の純ロジック中心。lint 自動テスト（flake8 / pep257 / copyright、27ファイル）は除く |
+| CI | GitHub Actions | 上記 pytest ＋ flake8 / pep257（docstring 規約）を push ごとに実行 |
 
 > 計測環境: Jetson Orin Nano 8GB, JetPack 6, Isaac ROS Dev Container
 > 未計測の指標（追従時の目標ロスト率・音声コマンド認識→動作開始レイテンシ・連続稼働時間）は実測でき次第追記する。
@@ -81,10 +115,15 @@
 
 ## Engineering Challenges I Solved
 
-実機開発で直面した技術課題と、その調査・解決プロセスを記録しています。
-**上ほどこのプロジェクトの中核**にあたる課題です。
+実機開発で直面した技術課題と、その調査・解決プロセスの記録です。
+**前半は「設計として解いた問題」、後半は「実機で踏んだ障害の調査記録」** に分けています。
 
-### 見失った人をどう取り戻すか — 2段リカバリ設計
+### 設計として解いた問題
+
+この3本がプロジェクトの中核です。いずれも「動くものを足す」より
+**「壊れ方を先に決める」「作らない判断をする」** ほうに時間を使っています。
+
+#### 見失った人をどう取り戻すか — 2段リカバリ設計
 
 ReID（人物再同定）を持たない検出器では、一度見失った時点で追跡が終わる。
 これを「失った瞬間に手元にある情報の多さ」に応じて段階的に手を打つ状態機械として設計した。
@@ -125,7 +164,7 @@ stateDiagram-v2
 
 → 詳細設計・全パラメータ・実機検証ログ → [docs/mode_details.md](docs/mode_details.md)
 
-### 発生源を問わない最終安全ゲート
+#### 発生源を問わない最終安全ゲート
 
 `/cmd_vel`（速度指令）を publish するノードは 9 箇所ある。個々の呼び出し箇所に安全チェックを
 足していく方式では「どれか1つが暴走すれば同じ事故が再発する」構造が残る
@@ -148,55 +187,7 @@ publisher 側の変更はゼロで、1トピックを購読するだけで全経
 
 → 幾何欠陥の詳細・シーケンス図・3層ゲートの設計 → [docs/safety_architecture.md](docs/safety_architecture.md)
 
-### 8GBメモリ制約下でのLLM/YOLO排他制御
-
-Jetson Orin Nanoの8GB共有メモリでLLM（~3GB）とYOLOパイプライン（~2GB）を
-同時に載せられない問題に対し、ROS2 Lifecycle + OS drop_cachesによる
-排他的メモリ管理を設計・実装した。
-
-<p align="center">
-  <img src="docs/images/ai_mode_memory_budget.png" alt="LLM/YOLO排他制御のメモリ使用量概算" width="70%">
-</p>
-
-→ Lifecycle遷移シーケンス図の詳細 → [docs/engineering_decisions.md](docs/engineering_decisions.md) (Issue-06)
-
-### シリアル通信デッドロックの特定と解消
-
-Jetson ↔ Pico間のUART通信が不定期にハングする事象が発生。
-カーネルのシリアルバッファ上限（4095 bytes）への到達が原因と特定し、
-送受信プロトコルの再設計で解消した。
-
-<p align="center">
-  <img src="docs/images/serial_buffer_backlog.png" alt="シリアル通信RXバッファ滞留の実測推移" width="75%">
-</p>
-
-→ 実測ログ全文・通信シーケンス図 → [docs/serial_deadlock_analysis.md](docs/serial_deadlock_analysis.md)
-
-### ToF I2Cブロッキングによるエンコーダ精度劣化の特定と解消
-
-ToFセンサのI2C読み取りがMCUのメインループをブロックし、
-エンコーダ割り込みの取りこぼしが発生。タスク分離により解消。
-
-<p align="center">
-  <img src="docs/images/tof_blocking_timeline.png" alt="ToF I2Cブロッキングによるメインループ遅延の概念図" width="80%">
-</p>
-
-→ [docs/tof_blocking_analysis.md](docs/tof_blocking_analysis.md)
-
-### LiDAR強度(intensity)による障害物ゴーストの解消
-
-床の段差が原因だと仮定して距離ベースの対策を試したが、現地確認で物理的な段差は
-存在しないと判明。反射強度を直接調べたところ、ゴースト方向は本物の反射より
-桁違いに弱い値（強度2〜3 vs 7〜60台）であることを発見し、intensityフィルタで解消。
-床面の鏡面反射による多重経路(マルチパス)が原因という仮説を実測データで裏付けた。
-
-<p align="center">
-  <img src="docs/images/lidar_intensity_compare.png" alt="ゴースト方向vs本物反射の反射強度比較" width="60%">
-</p>
-
-→ スキャンジオメトリ図・多重経路概念図・閾値探索の全過程 → [docs/lidar_intensity_ghost_analysis.md](docs/lidar_intensity_ghost_analysis.md)
-
-### レーザーオドメトリを較正した結果、あえてEKFへ統合しなかった判断
+#### レーザーオドメトリを較正した結果、あえてEKFへ統合しなかった判断
 
 車輪スリップ時に汚染される並進速度（vx）を補うため、LiDARスキャンから独立に
 並進を推定する `laser_odom_node` を新設した。回転はジャイロから既知として
@@ -219,7 +210,62 @@ ToFセンサのI2C読み取りがMCUのメインループをブロックし、
 
 → z分布ヒストグラム・較正の全過程 → [docs/engineering_decisions.md](docs/engineering_decisions.md) (Issue-10)
 
-### エッジLLMのコマンド分類精度 — Crosslingual Prompting
+---
+
+### 実機で踏んだ障害の調査記録
+
+いずれも **症状で止まらず真因まで降りた** 記録です。
+最初に目立つログやもっともらしい仮説は、たいてい真因ではありませんでした。
+
+#### 8GBメモリ制約下でのLLM/YOLO排他制御
+
+Jetson Orin Nanoの8GB共有メモリでLLM（~3GB）とYOLOパイプライン（~2GB）を
+同時に載せられない問題に対し、ROS2 Lifecycle + OS drop_cachesによる
+排他的メモリ管理を設計・実装した。
+
+<p align="center">
+  <img src="docs/images/ai_mode_memory_budget.png" alt="LLM/YOLO排他制御のメモリ使用量概算" width="70%">
+</p>
+
+→ Lifecycle遷移シーケンス図の詳細 → [docs/engineering_decisions.md](docs/engineering_decisions.md) (Issue-06)
+
+#### シリアル通信デッドロックの特定と解消
+
+Jetson ↔ Pico間のUART通信が不定期にハングする事象が発生。
+カーネルのシリアルバッファ上限（4095 bytes）への到達が原因と特定し、
+送受信プロトコルの再設計で解消した。
+
+<p align="center">
+  <img src="docs/images/serial_buffer_backlog.png" alt="シリアル通信RXバッファ滞留の実測推移" width="75%">
+</p>
+
+→ 実測ログ全文・通信シーケンス図 → [docs/serial_deadlock_analysis.md](docs/serial_deadlock_analysis.md)
+
+#### ToF I2Cブロッキングによるエンコーダ精度劣化の特定と解消
+
+ToFセンサのI2C読み取りがMCUのメインループをブロックし、
+エンコーダ割り込みの取りこぼしが発生。タスク分離により解消。
+
+<p align="center">
+  <img src="docs/images/tof_blocking_timeline.png" alt="ToF I2Cブロッキングによるメインループ遅延の概念図" width="80%">
+</p>
+
+→ [docs/tof_blocking_analysis.md](docs/tof_blocking_analysis.md)
+
+#### LiDAR強度(intensity)による障害物ゴーストの解消
+
+床の段差が原因だと仮定して距離ベースの対策を試したが、現地確認で物理的な段差は
+存在しないと判明。反射強度を直接調べたところ、ゴースト方向は本物の反射より
+桁違いに弱い値（強度2〜3 vs 7〜60台）であることを発見し、intensityフィルタで解消。
+床面の鏡面反射による多重経路(マルチパス)が原因という仮説を実測データで裏付けた。
+
+<p align="center">
+  <img src="docs/images/lidar_intensity_compare.png" alt="ゴースト方向vs本物反射の反射強度比較" width="60%">
+</p>
+
+→ スキャンジオメトリ図・多重経路概念図・閾値探索の全過程 → [docs/lidar_intensity_ghost_analysis.md](docs/lidar_intensity_ghost_analysis.md)
+
+#### エッジLLMのコマンド分類精度 — Crosslingual Prompting
 
 Qwen2.5 1.5B（日本語プロンプト）では「物体検索開始」が `start_mapping` に誤分類されていた。
 日本語入力のまま**英語プロンプト**に切り替えたところ（Crosslingual Prompting）、
@@ -231,6 +277,79 @@ Qwen2.5 1.5B（日本語プロンプト）では「物体検索開始」が `sta
 </p>
 
 → [docs/engineering_decisions.md](docs/engineering_decisions.md)
+
+---
+
+---
+
+## Show Me the Code
+
+> **コード本体は非公開です。** 設計と、その設計が実在することを示す抜粋のみを公開しています。
+
+このプロジェクトの規約は **「ROS2 通信とビジネスロジックを別ファイルに分ける」** こと
+（`xxx_node.py` は pub/sub と lifecycle だけ、`xxx_logic.py` は ROS2 を import しない純 Python）。
+おかげでロジック側は **実機もコンテナも無しに `pytest` で回せます**（40 モジュール / 1,617 件）。
+
+例として、上の[最終安全ゲート](#発生源を問わない最終安全ゲート)で触れた
+「壁にどこまで近づいてよいか」の導出関数と、その不変条件を守るテストを挙げます。
+
+**① 純ロジック** — `src/toyof_robot_navigation/toyof_robot_navigation/clearance_logic.py`
+
+```python
+def derive_clearance(master_m: float, delta_m: float,
+                     origin_offset_m: float) -> float:
+    """マスター値から、呼び出し側の基準における閾値を導出する.
+
+    Args:
+        master_m: `robot_safety_clearance_m`。base_link 中心から正面障害物
+            までの最小距離 [m]。
+        delta_m: その機能の差分 [m]。0.0 でマスターと同一線、正で緩く
+            （＝より手前で反応）、負で厳しく振る舞う。
+        origin_offset_m: 呼び出し側の測定原点が base_link からどれだけ前に
+            あるか [m]。footprint前端基準なら `robot_footprint_front_m`、
+            LiDAR の生レンジ基準なら `robot_lidar_offset_x_m`、地図EDT の
+            ように中心基準ならば 0.0.
+
+    Returns:
+        呼び出し側の基準で比較に使える閾値 [m]。原点が閾値より前にある
+        （＝計算結果が負になる）場合は 0.0 にクランプする——負の距離は
+        「どんな観測値も閾値を下回らない」＝ゲートが常に無効という意味に
+        なってしまい、安全機構としては最悪の壊れ方をするため.
+    """
+    return max(0.0, float(master_m) + float(delta_m) - float(origin_offset_m))
+```
+
+**② その不変条件を機械的に固定するテスト** — `src/toyof_robot_navigation/test/test_clearance_ladder.py`
+
+```python
+def test_recovery_layer_is_not_stricter_than_guard(geo):
+    """リカバリ層が実行安全層(GUARD)より厳しくないこと（今回壊れていた条件）.
+
+    厳しいと「GUARD は前進を許すのに GATE_THROUGH / ESCAPE / ナッジが
+    自ら諦める」帯ができ、狭所で一歩も踏み出せなくなる。途中で止まっても
+    GUARD が安全に止めるので、開始判定を GUARD より厳しくする理由は無い.
+    """
+    guard = _guard_stop_center(geo)
+    master = geo['robot_safety_clearance_m']
+    for key in ('through_safe_clearance_delta_m',
+                'guard_escape_clear_delta_m',
+                'nudge_safe_clearance_delta_m'):
+        recovery = master + geo[key]
+        assert recovery <= guard + 1e-9, (
+            f'{key} により リカバリ層 {recovery:.3f}m が '
+            f'GUARD 停止 {guard:.3f}m より厳しい（中心基準）。'
+            f'GUARD が通す場所でリカバリが諦める帯ができる'
+        )
+```
+
+このテストが守っているのは**値そのものではなく、値どうしの順序関係**です。
+「リカバリ層が実行安全層より厳しい」状態はログにもエラーにも出ず、各ノードは指令どおりに動き、
+どこにも例外は出ません。体感でしか分からないため、実際に **11日間気付かれませんでした**。
+だから数値ではなく関係をテストに固定しています
+（同ファイルには、設定値が `robot.urdf` / `nav2_params.yaml` の実体とズレたら落ちるテストも置いています）。
+
+テストが通ることではなく、**「その修正を無効化したら実際に落ちるか」まで確認する**のを規約にしています。
+落ちないテストは何も守っていないためです。
 
 ---
 
@@ -266,11 +385,41 @@ ROS2ノード (OTel SDK)
   → Grafana
 ```
 
-### フリート運用への拡張性
+メトリクスとログは**閉じた語彙**の下に置いています。数えたい事象は登録済みの名前でしか
+出せず、未登録のメトリクス名は実行時に破棄され、未登録のログタグは CI が検出します。監視項目が場当たりに増えて
+「誰も見ないダッシュボード」になるのを構造的に防ぐためです。
 
-OTel Collectorの `service.instance_id` により、
-複数台のロボットからのメトリクスを同一Prometheusに集約可能。
-2台目のロボット追加時にダッシュボードの横展開で対応できる設計。
+### 障害をインシデントとして扱う
+
+2026-07-21、探索中のロボットが壁に押し付けられ、車輪の空転から自己位置推定（AMCL）の共分散が
+平常時（0.05〜0.3）の一桁以上——`yaw_var=6.63`——まで発散しました。
+
+このとき大量に出ていたログは `REJECTED (lifecycle likely not active)` でしたが、これは
+**症状であって真因ではありません**。一次データ（`/amcl_pose`）まで遡って初めて発散が見えました。
+
+対策は「壊れた動きを直す」ではなく、**「壊れたことを検知して安全に止める層を独立に3つ足す」**。
+2026-07-24 に3層すべてが実機で発火し、人手を介さず自動復帰することまで確認しています。
+
+> それらしいエラーメッセージを鵜呑みにせず一次データまで降りるのは、DBA として10年やってきた
+> 障害対応の作法そのものです。ロボットでも型は変わりませんでした。
+
+→ 3層ゲートの設計 → [docs/safety_architecture.md](docs/safety_architecture.md) ／
+一次切り分けフロー → [docs/troubleshooting_flow.md](docs/troubleshooting_flow.md) ／
+アラート別 Runbook → [docs/observability_runbook.md](docs/observability_runbook.md)
+
+### 実装済みと設計段階
+
+「作った」と「設計した」は混ぜません。現時点の線引きは次のとおりです。
+
+| ステータス | 内容 |
+|---|---|
+| **実装済み・実機稼働** | OTel Collector → Prometheus → Grafana（Jetson 上で systemd 常駐）／3層ドリルダウンのダッシュボード／ログ・メトリクスの閉じた語彙と CI 検証／3層の安全ゲート（実機で発火・自動復帰まで確認） |
+| **実装済み・stub 環境で検証** | SLO / Error Budget（multi-window バーンレートの2段アラート）。現時点では S4（稼働率）・S5（パイプライン鮮度）の2指標のみで、実機メトリクスへの接続は未了／アラート別 Runbook（閾値・対処は dev 環境の合成データで確認したのみで、実インシデントでの検証は未了） |
+| **設計段階（未実装）** | N台フリート管制（`kubectl scale`）／Azure AKS + GitOps ／ Terraform IaC ／ アラート→自動修復のループ |
+
+**フリート運用への拡張性（設計）**: OTel Collector の `service.instance_id` により、複数台の
+ロボットからのメトリクスを同一 Prometheus へ集約できる。2台目の追加時はダッシュボードの
+横展開で対応する設計。
 
 → [docs/observability_detail.md](docs/observability_detail.md)
 
@@ -371,23 +520,37 @@ flowchart TB
 | GPU Pipeline | Isaac ROS NITROS (zero-copy) |
 | Observability | OpenTelemetry + Prometheus + Grafana |
 | MCU | Raspberry Pi Pico W (MicroPython) |
+| Auxiliary Sensing | Raspberry Pi 3（固定カメラ、死角補完サブエージェント、Isaac ROS非依存） |
 | Container | Docker (Isaac ROS Dev Container) |
-| CI/Dev | x86 Gazebo sim (`robotcar-sim`) + stub nodes for hardware-free testing |
+| CI/Dev | GitHub Actions (pytest + flake8/pep257) / x86 Gazebo sim (`robotcar-sim`) + stub nodes for hardware-free testing |
 
 ---
 
-## About Me
+## How I Built It — AIエージェント駆動開発
 
-10年以上のOracle DBA / インフラ運用経験を持つエンジニアです。
-障害対応、性能管理、可観測性、運用自動化を強みとしています。
-20名規模のDBAチームリーダー経験あり。
+このプロジェクトは **AI コーディングエージェント（Claude Code）と共同で開発しています。**
+ただし価値があるのは「AI に書かせたこと」ではなく、**AI を長期プロジェクトの運用に載せるための
+ルールを設計したこと** です。本業のテーマ（IT 保守運用の生産性を AI で上げる）と同じ問題構造を、
+個人プロジェクトで実践しています。
 
-ロボットをエッジコンピューティングシステムと捉え、
-これまでの運用知見をロボティクスに融合することを目指しています。
+| 仕組み | 解いている問題 |
+|---|---|
+| **エージェント向け指示書を「ルールとインデックス」に限定** | 決定の本文まで書くと肥大して読まれなくなる。決定は設計ノートへ委譲し、指示書には1〜3行の索引だけ置く |
+| **重要度ラベルを2軸で合成**（目的への接続 × リスク → P0〜P2 / hold） | 「技術的に面白い方」へ流れるドリフトを構造的に止める。技術的な正しさではなく、目的への寄与だけで優先度が決まる |
+| **タスクキューを実行環境ごとに二重化**（実機用 / デスク用） | 貴重な実機セッションが実機不要な作業に食われるのを防ぐ。1セッション丸ごと失った事故から作ったルール |
+| **セッション冒頭の台帳検証 `grep`** | ポインタが腐る（実タグが消えて説明文だけ残る）ことを毎回機械的に検出する。人間の記憶を前提にしない |
+| **実機セッション中は不具合を直さない** | 再現手順とログの採取だけ行い、原因究明と実装は起票してデスクセッションへ回す。実機時間を保護するための意図的な制約 |
+| **ROS2 通信とロジックの分離を規約化** | エージェントが書いたコードを実機なしで `pytest` 検証できる状態を保つ（→ [Show Me the Code](#show-me-the-code)） |
+
+要するに、**エージェントに対しても「運用設計」をしています。** 目的を定義し、ドリフトを検知し、
+高コストなリソース（実機時間）を保護する——DBA / SRE でやってきたことと同じ型です。
 
 ---
 
 ## Documentation
+
+**まず動かしたい方へ**: ビルド・起動手順は [docs/development_guide.md](docs/development_guide.md) にあります。
+Jetson 実機が無くても、x86 の Gazebo シミュレーション（`robotcar-sim`）で動作を再現できます。
 
 | Document | Content |
 |---|---|
@@ -402,6 +565,8 @@ flowchart TB
 | [docs/mode_details.md](docs/mode_details.md) | 各AIモードの内部ロジック・起動シーケンス・パラメータ |
 | [docs/safety_architecture.md](docs/safety_architecture.md) | 安全設計（多層フェイルセーフ・cmd_velガード） |
 | [docs/troubleshooting_flow.md](docs/troubleshooting_flow.md) | 障害切り分けフロー（Robot SRE） |
+| [docs/observability_runbook.md](docs/observability_runbook.md) | アラート別 Runbook（SLO バーンレート / 安全停止頻発 等の初動） |
+| [docs/logging_map.md](docs/logging_map.md) | どのノードがどのログへ何を出すかの一覧（調査の入口） |
 | [docs/robotics_as_mcp_design.md](docs/robotics_as_mcp_design.md) | マルチロボット連携の設計書（Robotics as MCP、未実装） |
 
 ---

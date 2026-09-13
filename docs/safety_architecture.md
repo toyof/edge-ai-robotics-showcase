@@ -55,7 +55,7 @@ cmd_vel forward guard「GUARD」（コリドー方式、N13-8b、2026-08-13）
 ```
 watchdog_sec = 0.5
 cmd_vel_guard_use_corridor          = true
-cmd_vel_guard_corridor_half_width_m  = 0.15   # footprint半幅
+cmd_vel_guard_corridor_half_width_m  = 0.18   # footprint半幅0.15m + 側方マージン0.03m（2026-09-11時点）
 cmd_vel_guard_corridor_front_offset_m = 0.035
 cmd_vel_guard_corridor_min_points   = 2       # 単発ノイズ点での急停止防止
 cmd_vel_guard_corridor_rear_offset_m = 0.295
@@ -63,19 +63,23 @@ cmd_vel_guard_scan_timeout_sec = 1.0
 ```
 
 **N23-1（2026-08-27）: stop/slow clearance は固定パラメータではなく、マスター
-`robot_safety_clearance_m`（`robot_geometry.yaml`、現在 **0.24**、base_link中心基準）
-から実行時に導出する。**
+`robot_safety_clearance_m`（`robot_geometry.yaml`、base_link中心基準）
+から実行時に導出する。** マスターは以降のユーザー指示で段階的に余裕を積んでおり、
+2026-09-11時点（mapping再実施前の安全マージン確保）で **0.28**（N23-1: 0.24 →
+N23-1b 2026-09-09: 0.26 → 2026-09-11: 0.28）。側方マージンも同様に
+`cmd_vel_guard_corridor_half_width_m` 0.15→0.17→**0.18**、
+`nudge_safe_side_margin_m` 0.0→0.02→**0.03** と積まれている。
 
 ```
 stop_clearance_m = derive_clearance(robot_safety_clearance_m,
                                      cmd_vel_guard_stop_delta_m=0.0,
                                      robot_footprint_front_m=0.165)
-                  = 0.24 + 0.0 − 0.165 = 0.075 m
+                  = 0.28 + 0.0 − 0.165 = 0.115 m
 
 slow_clearance_m = derive_clearance(robot_safety_clearance_m,
                                      cmd_vel_guard_slow_delta_m=0.10,
                                      robot_footprint_front_m=0.165)
-                  = 0.24 + 0.10 − 0.165 = 0.175 m
+                  = 0.28 + 0.10 − 0.165 = 0.215 m
 ```
 
 **数値をコピーして揃えるのは禁止**（以前それをやって値がずれ、11日間気付かずに
@@ -100,8 +104,8 @@ tag_localization_manager ＋ Nav2 velocity_smoother ＋ teleop）あり、個々
 `cb_cmd_vel` で、発生源を問わず前進成分（`linear.x > 0`）のみをゲートする。
 `/scan_body_filtered`（自車体のみ除去・追従対象は残すスキャン、詳細 →
 `docs/robot_architecture.md` §3）を見て、**footprint をそのまま前方へ掃いた矩形
-（コリドー、半幅0.15m）**内に障害物があれば `linear.x=0` に落とす。**後退・その場旋回は
-常に通す**（全成分を止めると壁の前で脱出不能になるため）。
+（コリドー、半幅0.18m＝2026-09-11時点）**内に障害物があれば `linear.x=0` に落とす。
+**後退・その場旋回は常に通す**（全成分を止めると壁の前で脱出不能になるため）。
 
 **旧・扇形（コーン）方式からの移行経緯（N13-8b）**: 扇形は原点で1点に収束するため、
 衝突コースの障害物が停止判定を受ける前にコーンから外れて消える幾何欠陥があった
@@ -129,9 +133,9 @@ sequenceDiagram
     Bridge->>Scan: 直近スキャンを参照
     alt コリドー内に障害物なし
         Bridge->>Motor: そのまま前進を通す
-    else 減速帯（0.075〜0.175m）
+    else 減速帯（0.115〜0.215m）
         Bridge->>Motor: 速度を絞って通す（blocked=False）
-    else 停止帯（<0.075m）
+    else 停止帯（<0.115m）
         Bridge->>Motor: linear.x = 0 に強制
         Note over Bridge: 後退・その場旋回は常に通す
     end
@@ -176,6 +180,34 @@ wheel_odom誤差蓄積→AMCLパーティクルフィルタ発散→Nav2連続RE
 クラッシュして発行が丸ごと止まる」ケースを、`perception_timeout_sec`（既定
 **2.0秒**）を超えてメッセージが届かなくなった時点で捕まえて安全停止する。
 上記3層ゲート（A〜C）より前段のチェックとして働く。
+
+## 3.5 SLAM自己位置ジャンプ検知ゲート（N24-83、実装済み・実機未検証）
+
+T-AT-6-21 のゲートA（AMCL共分散発散）は AMCL 起動時のみ有効で、SLAM/mapping
+モード（AMCL未起動）中の自己位置推定には対応する安全ゲートが無かった
+（2026-09-11、mapping standalone探索中にSLAM推定姿勢の無音のズレをユーザーが
+RVizで目視発見。ログ・既存の安全ゲートいずれにも異常値が記録されていなかった）。
+
+`mapping_lifecycle_node` の `MapOdomJumpMonitor`（`slam_jump_detect_logic.py`、
+`toyof_robot_navigation`、ROS2非依存）が既存の2Hzポーズサンプリングに相乗りし、
+直近 `window_sec`（3.0秒）の窓で「mapフレームでの変位」と「odomフレーム
+（EKF、短期的には信頼できるdead-reckoning）での変位」を比較する。両者の差
+（excess）が `jump_threshold_m`（**0.5m**）を `jump_consecutive_limit`
+（**2回**）連続で超えたら「実際の移動では説明できないmap側の飛び」と判定し
+探索を安全停止する。
+
+- **検知できるのは並進成分だけ**（既知の限界）: 剛体変換は距離を保存するため、
+  map→odom が回転だけ飛んだ場合は静止中 excess=0 で見逃す。
+- **発火時は地図を保存しない**（`_finish_exploration()` が保存経路・tagステージング
+  コミットの両方を飛ばす）。ジャンプ検知＝手元の地図が壊れているということなので、
+  通常保存すると壊れた地図で既存の地図を上書きしてしまうため。代償として誤検知すると
+  走行1回ぶんの地図を失う。
+- 全域再ローカライズの自動化は T-AT-6-21 ゲートAと同じ理由で意図的に未実装（操作者の
+  判断に委ねる）。
+- ロールバックは `slam_jump_detect_enabled: false`。閾値（0.5m/2回/3秒）は較正データ
+  無しの暫定値で、実機検証は未実施。
+
+詳細 → CLAUDE.md §6.7 N24-83、`docs/design_notes.md` N24-83、`todo/navigation.md` N24-83。
 
 ---
 

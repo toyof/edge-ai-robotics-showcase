@@ -156,9 +156,14 @@ v4l2_camera は生き続けるため DDS ゴーストパブリッシャー問題
 **GVD/Frontier 自律探索・人追従ロストリカバリ（`mapping_lifecycle_node`, `toyof_robot_navigation`）**:
 mapping モードの地図拡張、および人追従ロスト時の Tier2 探索（→ CLAUDE.md §6.3）の両方を
 `GvdExplorer` 共有クラスが担う。GVD（一般化ボロノイ図）の骨格からフロンティア/ゲートを検出し、
-GATE_THROUGH（2レグ駆動）・エリアcommit/退役・スタック脱出などの状態機械で探索を進める。
+GATE_THROUGH（2レグ駆動）・エリアcommit/退役・スタック脱出などの状態機械で探索を進める
+（あきらめ判断＝退役/ペナルティ/再武装は7層＋補2種、N24-74）。
+`mapping_lifecycle_node` は自己位置ジャンプ検知（`MapOdomJumpMonitor`、N24-83、
+§8参照）・探索正常完了時の既存マップNav2(AMCL)へのtag正対ハンドオフ
+（N24-79、`tag_facing_enabled`既定 **true**、N24-79d）も担う。地図確率判定の占有閾値は `mapper_params_online_async.yaml` の
+`occupancy_threshold: 0.25`（N24-80、既定0.1から変更）。
 内部ロジックの詳細（パラメータ・状態遷移・ロールバック手段）→ `docs/mode_details.md`、
-CLAUDE.md §6.4。
+CLAUDE.md §6.4/§6.5/§6.7。
 
 ### Nav2 パラメータファイル
 
@@ -374,8 +379,12 @@ EKF (robot_localization, ekf.yaml)
 
 laser_odom_node（N24-68, toyof_robot_vehicle。既定 true で起動する）
   並進限定レーザーオドメトリ。回転Δθはジャイロから既知として与え、
-  scan-to-scanを並進2自由度の格子探索へ縮退。EKFへは繋がない（N24-68cで確定・観測専用）。
-  wheel_odomのスリップ検知（下記）の第3軸として利用。未起動時は当該軸がフェイルオープンで無害。
+  scan-to-scanではなく「約1秒前のスキャン」（`baseline_sec` 1.0、N24-72）と
+  突き合わせて並進2自由度の格子探索へ縮退。EKFへは繋がない（N24-68cで確定・観測専用）。
+  「動いたか」は推定値ではなく2仮説（車輪の主張どおり動いた／並進していない）の
+  対数尤度比で答え、`laser_odom/motion_evidence`（x=尤度比 / y=車輪の主張 / z=点数、
+  0点は「証拠なし」）へpublish（N24-73）。判定（しきい値・デバウンス）は
+  wheel_odom_node側の`LikelihoodStuckDetector`が持つ。
   ロールバック: hardware_bringup.launch.py の laser_odom:=false
   （2026-09-05、起動していないとスリップ検知translation軸が証言者を持たず常に無効になるため
   既定falseから変更。代償はCPU 1コア約31%＝全体約5%を常時負担）
@@ -398,14 +407,16 @@ cov_vx: 0.001
 
 ### スリップ検出・修復
 
-車輪空転（壁ドン空転＝ホイールは回るが車体は静止）を独立した2〜3軸で検知し、
+車輪空転（壁ドン空転＝ホイールは回るが車体は静止）を独立した軸で検知し、
 検知したらその軸の測定を棄却（EMA も更新しない）。ヨーではなく**並進(vx)を汚す**（N23-5）。
+**`slip_translation_enable`（N24-68dの瞬時速度比較軸）は既定 `false` のまま退役済み**
+（しきい値0.05 m/sが推定器自身の分解能より細かく、ゲート閉中の沈黙を静止の証言と
+読み違えていたため）。後継は下記「拘束検知」。
 
 | 軸 | 判定 | 対応 |
 |---|---|---|
 | 回転（ホイール vs IMU） | 校正済みホイール角速度が `slip_w_wheel_high`(0.40 rad/s) 超過 かつ IMU角速度が `slip_w_imu_low`(0.15) 未満 | 回転のみ `self.theta` を IMU絶対yaw差分で置換 |
 | 並進（報告速度） | 報告速度が `slip_reject_speed_mps`(0.15 m/s＝指令上限の1.5倍) 超過 | vx を棄却・EMA凍結（N23-5） |
-| 並進（wheel vs laser_odom、既定無効） | `slip_translation_enable: true` かつ wheel(`slip_v_wheel_high` 0.15) と laser_odom(`slip_v_laser_low` 0.05) が乖離 | vx を棄却（N24-68d。IMU可否と無関係に評価できる独立軸。laser_odom未起動時はフェイルオープンで無害） |
 
 | パラメータ | デフォルト | 意味 |
 |---|---|---|
@@ -414,9 +425,31 @@ cov_vx: 0.001
 | `slip_hold_duration` | `0.5` s | スリップ判定ヒステリシス時間 |
 | `slip_imu_timeout` | `0.2` s | IMU データが古いとみなすタイムアウト |
 | `slip_reject_speed_mps` | `0.15` m/s | 並進棄却の閾値（`0.0` でロールバック） |
-| `slip_translation_enable` | `false`（`wheel_odom.yaml` で `true` に上書き） | laser_odom併用の第3軸を有効化 |
+| `slip_translation_enable` | `false`（退役、N24-70） | laser_odom併用の瞬時速度比較軸（旧・現在は下記の拘束検知へ移行） |
 
-詳細 → CLAUDE.md §6.9、`docs/design_notes.md` N21-2/N21-3/N23-5/N24-68。
+### 拘束検知（N24-70/N24-73）— 「車輪は進んだのに外界が動かない」
+
+瞬時速度ではなく窓内の変位比・尤度比で「片輪衝突」「LiDARに映らない物への引っかかり」
+という秒オーダーの持続的な拘束を検知する（`TranslationStuckDetector` /
+`LikelihoodStuckDetector`、`wheel_odom_node`）。`stuck_evidence_mode: 'likelihood'`
+が既定（2026-09-08実機検証のうえ`'ratio'`から切替済み。狭い部屋の通常直進で誤発火した
+ため）。材料は `wheel_odom/forward_raw`（棄却前の前進速度）と
+`laser_odom/motion_evidence` の尤度比。検知時は `wheel_odom/stuck`（slipとは別トピック）
+→ vx棄却 ＋ `pico_bridge_node` で前進のみ `stuck_block_hold_sec`(1.0秒) ブロック
+（旋回・後退は止めない）。ロールバックは `stuck_detect_enable: false`。
+
+### 不感帯補償中の車輪モデル信頼度宣言（N24-84/85）
+
+`pico_bridge_node` の不感帯補償（§6.8、KICK/STALL/HOLD）は自身が出す指令なので、
+その間「車輪が車体の代理にならない」ことは推論ではなく100%既知。`pico/deadband_state`
+（String、`representative_deadband_state()`で左右を1本に畳む）を新設し
+`wheel_odom_node`が購読、KICK/STALL/HOLD中は vx を `UNKNOWN_COV` でpublish（0ではない
+——KICKが成功して実際に進んだ場合0も嘘）。`distrusted`判定はN23-5のスリップ速度ゲート
+より**先に**評価する（N24-85。KICKのバーストがスリップゲートにも該当しやすく、順序を
+誤るとUNKNOWN_COV保護が上書きされていた）。トピック途絶・陳腐化時はフェイルオープン
+（車輪を信じる）。ロールバックは `deadband_distrust_enable: false`。
+
+詳細 → CLAUDE.md §6.9、`docs/design_notes.md` N21-2/N21-3/N23-5/N24-68/N24-70/N24-72/N24-73/N24-84/N24-85。
 
 ---
 

@@ -85,6 +85,8 @@ src/
 │       ├── frontier_explorer_logic.py         # フロンティア探索ロジック（ROS2非依存）
 │       ├── gvd_explorer_logic.py              # GVD 探索ロジック（ROS2非依存）
 │       ├── gvd_explorer_strategy.py           # GVD 探索戦略
+│       ├── candidate_ledger.py                 # 候補の可否判定を集約する台帳（gate/waypoint/precheck/opening/open_wpの5本、N24-74c）
+│       ├── explorer_profile.py                 # mapping限定パラメータのプロファイル集約（N24-74d）
 │       ├── explorer_factory.py                # 探索戦略ファクトリ
 │       ├── explorer_interface.py              # 探索インタフェース定義
 │       ├── map_harden_node.py                 # 壁の隙間の未知セルを占有化/ソフトコスト化して再発行（N24-54/55）
@@ -92,7 +94,9 @@ src/
 │       ├── corridor_width_monitor_node.py     # 通路幅推定・NARROW/WIDEプロファイル切替（N22-5/N24-30）
 │       ├── corridor_width_logic.py            # 通路幅判定ロジック（ROS2非依存）
 │       ├── clearance_logic.py                 # robot_safety_clearance_m からの離隔導出（N23-1）
-│       └── nudge_safety_logic.py               # GATE_THROUGH/ノッジの前方安全確認（N24-54c）
+│       ├── nudge_safety_logic.py               # GATE_THROUGH/ノッジの前方安全確認（N24-54c）
+│       ├── slam_jump_detect_logic.py           # map/odomフレーム変位比較による自己位置ジャンプ検知（N24-83）
+│       └── tag_facing_logic.py                 # mapping正常完了後の最寄りtag正対姿勢計算（N24-79）
 │
 ├── toyof_robot_localization/   # AprilTag 自己位置推定（ament_python）
 │   └── toyof_robot_localization/
@@ -142,9 +146,9 @@ src/
 ```
 isaac_ros-dev/
 ├── docker/
-│   ├── Dockerfile.robotcar         # Isaac ROS custom image (Jetson)
-│   ├── jetson/                     # Jetson 用カスタム Dockerfile・起動スクリプト
-│   ├── scripts/entrypoint_additions/
+│   ├── jetson/                     # Jetson 用カスタム Dockerfile（Dockerfile.robotcar）・起動スクリプト（run_detached.sh, entrypoint_additions/）
+│   ├── observability/              # OTel Collector + Prometheus + Grafana（docker-compose、dev/prod構成）
+│   ├── pi3-robo/                   # Raspberry Pi 3をカメラノード（死角補完用）として使うDocker環境。README付き
 │   └── sim/                        # x86 Gazebo シミュレーション環境
 │       ├── Dockerfile / docker-compose.yml / entrypoint.sh / run_mapping_test.sh
 ├── models/                         # TensorRT engines / ONNX models (.gitignore 対象)
@@ -155,6 +159,7 @@ isaac_ros-dev/
 ├── bringups/                       # Shell bringup scripts
 ├── docs/
 ├── tools/
+├── index.html / .nojekyll          # showcase公開（GitHub Pages）用トップページ・Jekyll無効化
 └── pico_firmware/
 ```
 

@@ -192,7 +192,7 @@ on_cleanup で SLAM サブプロセスを SIGINT → SIGKILL で終了
 
 | ファイル | 役割 |
 |---|---|
-| `src/toyof_robot_ai_control/toyof_robot_ai_control/mapping_lifecycle_node.py` | SLAM 起動・探索ループ管理 |
+| `src/toyof_robot_navigation/toyof_robot_navigation/mapping_lifecycle_node.py` | SLAM 起動・探索ループ管理 |
 | `src/toyof_robot_ai_control/toyof_robot_ai_control/frontier_explorer_logic.py` | フロンティア検出・選択ロジック（ROS2 非依存） |
 | `src/toyof_robot_bringup/launch/autonomy.launch.py` | SLAM/Nav2 起動（`mode:=slam_nav` で SLAM Toolbox + Nav2 セット、旧 slam_with_nav.launch.py を統合。[[navigation]] Issue-12） |
 | `src/toyof_robot_bringup/config/mapper_params_online_async.yaml` | SLAM Toolbox パラメータ |
@@ -330,10 +330,15 @@ flowchart TD
 
 #### 退役ルール
 
-| 状況 | 退役方式 | 解除条件 |
-|---|---|---|
-| `nav_ok=False` が `abort_retry_limit`(=2) 回 | `hard_retired` （永久除外） | なし |
-| `new_area` が `stagnation_window`(=3) 回連続で小さい | `soft_defer` + クールダウン | クールダウン時間経過後に再試行 |
+**上記2行（hard_retired / soft_defer）は初期実装の姿。現行（N24-71〜N24-78、
+「7層＋補2種・状態変数16本・パラメータ25個」）はこの2方式から大幅に拡張されており、
+このページでは追随しない。** 候補の可否判定は `CandidateLedger`（`candidate_ledger.py`、
+`gate`/`waypoint`/`precheck`/`opening`/`open_wp` の5台帳に統合済み、N24-74c）へ集約され、
+`hard_abort` 確定のたびに加点する恒久ペナルティ（`_gate_penalties`、再武装でも消えない、
+N24-71）や、退役の根拠が失効したら復帰する再受理（N24-28）等が積み重なっている。
+**正確な現行仕様は CLAUDE.md §6.4（N24-71/74/74c/74d/75/77/78）と
+`docs/design_notes.md` の同ID群を参照すること**（このページの表を数値だけ更新すると
+すぐ再び陳腐化するため、詳細は一次情報側に置く）。
 
 #### エリア停滞判定（`is_complete()`、P8-4/P8-7/P8-9〜P8-11）
 
@@ -346,6 +351,33 @@ flowchart TD
 | グローバル判定 | 直近 `gvd_area_stagnation_global_limit`（既定15）件の new_area 移動平均が `gvd_area_stagnation_global_avg_m2`（既定0.05m²）未満 | 場所を転々としながらもマップ全体で僅かにしか進まないケース（ローカル判定は効かない）を捕捉 |
 
 いずれも `record_outcome()` で **source を問わず**（`gvd_gate` だけでなく `micro`/`opening`/`frontier` も）記録する。
+
+---
+
+### RViz 可視化（GVD ゲート・現在ゴール）
+
+`mapping_lifecycle_node` が2トピックへ `visualization_msgs/MarkerArray` を発行する（10秒に1回再計算、ナビゲーション動作には影響しない）。
+
+**`/exploration/markers`**（`_visualize_gvd_gates()`。探索本体と同じ経路——退役済み・到達不能フィルタを通した後の候補だけを描く）:
+
+| 形状 | `ns` | 意味 |
+|---|---|---|
+| 円柱（半透明・薄い青） | `gvd_area` | エリア commit 範囲（N24-1）。この円内のゲートを消化してから外へ出る |
+| 球（緑・不透明） | `gvd_gates` | **いま選べるゲート**（エリア内・退役していない）。直径 = clearance |
+| 球（灰・半透明） | `gvd_gates_out_of_area` | 存在するが今は選ばれないゲート（エリア commit 中は対象外）。N24-28 で「消さずに描く」設計に変更（実機での誤挙動を目視で追う唯一の手がかりだったため、絵を実挙動に合わせるのではなく「存在する」と「いま選べる」を描き分ける） |
+| 矢印（オレンジ） | `gvd_waypoints` / `gvd_waypoints_out_of_area` | ゲート中心 → ウェイポイント。**通り抜ける向きではない**（無指向 BFS が拾った「近傍で最も広い点」であって通路の軸とは無関係、N24-29）。実際の通過方位は `los_unknown_heading()` が別途決める |
+
+**`/exploration/goal_marker`**（`_visualize_goal()`。ゴール源ごとに色分けし、緑球（ゲート由来）以外のゴールも見えるようにする、N24-12）:
+
+| ゴール源 (`source`) | 色 | ラベル |
+|---|---|---|
+| `gvd_gate` | 緑 | GATE |
+| `open_boundary` | マゼンタ | OPEN-BOUNDARY |
+| `opening` | 水色 | OPENING |
+| `micro` | 黄 | MICRO |
+| `frontier` | オレンジ | FRONTIER |
+
+縦長の円柱＋テキストで現在の実ゴールを描き、ゲート由来（`through_x/y` が設定されている）なら白い矢印で通り抜け先まで追加で描く（N24-11 の追加前進ぶんが目で見えるようにするため）。
 
 ---
 
@@ -494,17 +526,32 @@ flowchart TD
 ```mermaid
 flowchart TD
     A([_finish_exploration]) --> B[TTS 発話\n地図の作成が完了しました]
-    B --> C[/slam_toolbox/serialize_map_and_state\n.posegraph + .data 形式\n再ローカライズ用]
-    C --> D[/slam_toolbox/save_map\n.pgm + .yaml 形式\nNav2 global costmap 用]
+    B --> C[map_saver_cli\n.pgm + .yaml 形式\nNav2 global costmap 用\nmtime>保存開始時刻で成否判定・N9-4c]
+    C --> D[/slam_toolbox/serialize_map_and_state\n.posegraph + .data 形式\n再ローカライズ用\npgm/yamlより後に書く]
     D --> E[TTS 地図の保存が完了しました]
-    E --> F{standalone?}
-    F -- Yes --> G[rclpy.shutdown\nプロセス終了]
-    F -- No --> H[deactivate:mapping publish]
-    H --> I[ai_mode_manager が受信\nmapping cleanup → activate:llm]
-    I --> J([LLM モードへ復帰])
+    E --> F{completion_kind\nnormal/stall?}
+    F -- "tag確定済み\n(N24-79/79c)" --> T[既存マップNav2(AMCL)へ切替\ntag正対して待機\ntag_facing_enabled既定true(N24-79d)]
+    F -- No --> G{standalone?}
+    G -- Yes --> H[rclpy.shutdown\nプロセス終了]
+    G -- No --> I[deactivate:mapping publish]
+    I --> J[ai_mode_manager が受信\nmapping cleanup → activate:llm]
+    J --> K([LLM モードへ復帰])
 ```
 
 保存先は `map_save_path`（デフォルト: `/workspaces/isaac_ros-dev/map/explored_map`）。
+**`/slam_toolbox/save_map` は撤去済み**（N9-4c、pgm/yaml保存は `map_saver_cli` に統一）。
+
+**探索正常完了時のtag正対ハンドオフ（N24-79、既定有効・実機未検証）**: standalone探索が
+「探索し尽くした」（ストール/giveupではない）で終わり、かつタグが確定していれば、
+自己シャットダウンの代わりに既存マップNav2(AMCL)へ切替え最寄りタグへ正対してnavi待機の
+まま終える。完了理由の区別は `GvdExplorerStrategy.completion_kind()`
+（`'normal'`/`'stall'`/`None`）。**N24-79c（2026-09-10）で対象を`'normal'`のみから
+`'normal'/'stall'`へ拡大**（ハンドオフ自体は探索を継続しないため、未閉鎖境界が残る
+stallでも安全性は変わらないという判断）。**N24-79d（2026-09-11）で `tag_facing_enabled`
+の既定が `false`→`true` に変更済み**（launch引数配線漏れの修正とセットでユーザー明示
+指示によりデフォルトON化）。ロールバックは `tag_facing_enabled:=false`。
+自己位置ジャンプ検知（N24-83、`docs/safety_architecture.md` §3.5）で停止した場合は
+壊れた姿勢でAMCLナビを始めないよう、このハンドオフの対象から自動的に外れる。
 
 ---
 

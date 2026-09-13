@@ -86,8 +86,8 @@ KICK 39件があり、**N23-5 のスリップ棄却も3件発火していた**�
 
 | ノード | 担当機能 | パッケージ | 代表ログタグ | 主要トピック |
 |---|---|---|---|---|
-| `pico_bridge_node` | **モーターへの唯一の出口。** cmd_vel ゲート（GUARD）・不感帯補償・Pico シリアル | `toyof_robot_vehicle` | `[GUARD]` `[DEADBAND]` `[pico]` | SUB `cmd_vel`, `wheel_odom/slip` / PUB `cmd_vel_guard/blocked`, `cmd_vel_guard/blocked_kind`, `pico/*` |
-| `wheel_odom_node` | 車輪オドメトリ（vx のみ）・スリップ検知 | `toyof_robot_vehicle` | `SLIP DETECTED` `Slip cleared` | SUB `pico/rev_*`, `pico/enc_ts_ms` / PUB `wheel_odom`, `wheel_odom/slip`, `wheel_odom/slip_debug` |
+| `pico_bridge_node` | **モーターへの唯一の出口。** cmd_vel ゲート（GUARD）・不感帯補償・Pico シリアル | `toyof_robot_vehicle` | `[GUARD]` `[DEADBAND]` `[pico]` | SUB `cmd_vel`, `wheel_odom/slip` / PUB `cmd_vel_guard/blocked`, `cmd_vel_guard/blocked_kind`, `pico/*`, `pico/deadband_state`（N24-84） |
+| `wheel_odom_node` | 車輪オドメトリ（vx のみ）・スリップ検知・拘束検知（stuck）・不感帯補償中の信頼度宣言 | `toyof_robot_vehicle` | `SLIP DETECTED` `Slip cleared` `[STUCK]` `[STUCK-LR]`（N24-70/73） `[WHEEL]`（不感帯補償中、N24-84） | SUB `pico/rev_*`, `pico/enc_ts_ms`, `pico/deadband_state`, `laser_odom/motion_evidence` / PUB `wheel_odom`, `wheel_odom/slip`, `wheel_odom/slip_debug`, `wheel_odom/stuck`, `wheel_odom/forward_raw` |
 | `imu_node` (`imu.py`) | IMU 生値・ZUPT バイアス再推定・アンチエイリアス標本化 | `toyof_robot_sensor` | `[ZUPT]` `Calibration` | PUB `imu/data_raw`, `imu/mag`, `imu/temp` |
 | `imu_filter_node` | Madgwick 姿勢フィルタ（外部パッケージ） | `imu_filter_madgwick` | — | SUB `imu/data_raw` / PUB `imu/data` |
 | `imu_yaw_aligner_node` | IMU ヨーの基準合わせ | `toyof_robot_vehicle` | `Input IMU` | SUB `/imu/data` / PUB `/imu/data_aligned` |
@@ -128,7 +128,7 @@ KICK 39件があり、**N23-5 のスリップ棄却も3件発火していた**�
 | `localization_session_manager_node` | 地図確立（タグ前スキャン→既存マップ or SLAM）の一元管理 | `toyof_robot_ai_control` | `[localization_session]` | PUB `localization_session/status` |
 | `follow_goal_generator_node` | **追従ゴール生成とロスト時リカバリ（Tier1/Tier2）・安全ゲート群** | `toyof_robot_ai_control` | `[SAFETY]` `[FOLLOW]` `[RECOVERY]` `[STOP]` `[TRAIL]` `[CAPTURE]` | SUB `amcl_pose`, `cmd_vel_guard/blocked`, `wheel_odom/slip`, `scan_body_filtered` / PUB `cmd_vel`, `follow/person_*` |
 | `object_tracking_info_node` | 検出のトラッキング（IoU）とターゲット選択 | `toyof_robot_ai_control` | `[T-29-6]` `Target` `LOST` | SUB `detections_output`, `target_id` / PUB `object_tracking/info` |
-| `mapping_node` (`mapping_lifecycle_node`) | SLAM 探索（GVD/Frontier）・地図保存・タグ登録の起動 | `toyof_robot_navigation` | `[mapping]` `[gvd]` `[gvd_debug]` | SUB `/map`, `cmd_vel_guard/blocked`, `odometry/filtered` / PUB `cmd_vel`, `exploration/*` |
+| `mapping_node` (`mapping_lifecycle_node`) | SLAM 探索（GVD/Frontier）・地図保存・タグ登録の起動・自己位置ジャンプ検知（N24-83）・完了時tag正対ハンドオフ（N24-79） | `toyof_robot_navigation` | `[mapping]`（`SLAM自己位置ジャンプを検知`等） `[gvd]` `[gvd_debug]` | SUB `/map`, `cmd_vel_guard/blocked`, `odometry/filtered` / PUB `cmd_vel`, `exploration/*` |
 | `yolo_follow_node` | 人追従モードの LifecycleNode（Nav2・YOLO パイプラインを起動） | `toyof_robot_ai_control` | `[yolo_follow]` | — |
 | `yoloworld_node` | 物体探索モードの LifecycleNode | `toyof_robot_ai_control` | `[yoloworld]` | — |
 | （yoloworld worker） | YOLO-World 推論・色検証（別プロセス） | `toyof_robot_ai_control` | `[worker]` `[calibration]` | — |

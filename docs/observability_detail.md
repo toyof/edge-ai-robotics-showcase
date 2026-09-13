@@ -157,3 +157,51 @@ with self._latency.measure():
   でホスト単体テスト（コンテナ不要）。
 - 計測ポイント（どの区間を測るか）の各ノード結線は M2-H-7（要事前相談）。ヘルパ導入で
   ノード側の追加はボイラープレート数行に収まる。
+
+## Canvas パネル化構想（M2-C・設計のみ、実装は次回 UI 操作セッション待ち）
+
+`todo/observability_otel.md` M2-C の「ロボット構成図レイアウト」を、実際に Grafana
+Canvas パネルへ落とし込むための配置案。**Canvas パネルの要素追加・データバインドは
+Grafana UI 上の手作業が必須**なため、このセッション（docker/ROS とも利用不可）では
+実装できない。次に Grafana UI を触れるセッションで、この配置案どおりに要素を作る。
+
+電力・データの流れ方向（上→下）に3段のブロックを積み、各ブロックの下に主要メトリクスを
+`metric value` 要素としてバインドする。
+
+```
+┌────────────────────────────────────────────┐
+│ Jetson Orin Nano（ホスト）                    │
+│  CPU load 1m : system_cpu_load_average_1m    │ 閾値 黄2 / 赤4
+│  GPU 使用率  : jetson_gpu_util_pct           │ 閾値 黄60 / 赤80
+│  GPU/CPU 温度: jetson_gpu_temp_c / jetson_cpu_temp_c │ 閾値 黄65 / 赤75
+│  消費電力    : jetson_power_mw               │ 閾値 黄5500 / 赤7000
+│  メモリ空き  : system_memory_usage{state="free"} │ 閾値 赤<512MB / 黄<1GB
+└──────────────────┬───────────────────────────┘
+                    │ （矢印アイコン要素・ラベル "Docker"）
+┌──────────────────▼───────────────────────────┐
+│ ROS2 コンテナ                                 │
+│  仕事量      : rate(work_event_count[1m]) * 60 （/min換算）│
+│  推論レイテンシ: rate(inference_latency_ms_sum[5m])       │
+│               / rate(inference_latency_ms_count[5m])      │ model別、robot_detail.json
+│               （id:38 のBarチャートと同一クエリ・相互参照）│  パネルへリンク
+│  カメラ hz   : ros_topic_hz{topic="/image_raw/compressed"} │ 閾値 赤<1
+│  プロセス別メモリ: sum by (executable_name) (process_memory_usage) │ robot_detail.json id:39 と同一
+└──────────────────┬───────────────────────────┘
+                    │
+┌──────────────────▼───────────────────────────┐
+│ 4WD シャーシ（将来拡張・プレースホルダ）        │
+│  エンコーダ・モーター電流は未計測                │ テキスト要素のみ、メトリクス未バインド
+└────────────────────────────────────────────┘
+```
+
+- 各ブロックは `rectangle` 要素、メトリクス値は `metric value` 要素（datasource
+  Prometheus・上記 PromQL をそのままクエリに設定）、矢印は `icon` 要素でよい。
+- 閾値の色分けは `robot_detail.json` の対応する stat パネル（id 3-8）・M2-E で追加した
+  timeseries パネル（id 38-39）と同じ値に揃える（ドリフト防止）。
+- 「ROS2コンテナ」ブロックの推論レイテンシ・プロセス別メモリの2項目は、今回 M2-E で
+  `robot_detail.json` に追加した id:38（推論レイテンシ比較）・id:39（モード組み合わせ別
+  メモリ使用量）と同一クエリにしてあるため、Canvas 側は「今の値」・timeseries 側は
+  「推移」という役割分担になる。
+- 現状の Stat + TimeSeries 構成（`robot_detail.json`）で情報としては同等のものが既に
+  見えているため、Canvas 化自体の優先度は高くない（`todo/observability_otel.md` M2-C
+  の位置づけどおり、ポートフォリオ向けの見た目改善が主目的）。
