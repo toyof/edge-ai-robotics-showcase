@@ -320,6 +320,19 @@ code{font-family:var(--font-mono);font-size:.92em;background:rgba(127,127,127,.1
 }
 .controller .arrows button:disabled{opacity:.35;cursor:default;}
 .controller .arrows button:focus-visible,.controller .dots button:focus-visible{outline:2px solid var(--orange);outline-offset:2px;}
+
+/* ---- links to existing detailed docs ---- */
+.doclinks{
+  margin-top:16px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+  font-family:var(--font-mono);font-size:12px;
+}
+.doclinks .lbl{color:var(--muted);}
+.doclinks a{
+  color:var(--ink);text-decoration:none;font-weight:600;
+  background:var(--panel-2);border:1.5px solid var(--ink);border-radius:999px;padding:5px 12px;
+}
+.doclinks a:hover{background:var(--orange-soft);border-color:var(--orange);}
+.doclinks a:focus-visible{outline:2px solid var(--orange);outline-offset:2px;}
 </style>
 </head>
 <body>
@@ -386,6 +399,12 @@ code{font-family:var(--font-mono);font-size:.92em;background:rgba(127,127,127,.1
             <div class="note" style="border-top:none;padding-top:0;margin-top:0;">上＝AI頭脳層、下＝ハードウェア層。矢印は「下位層の上に成り立つ」依存の向き。</div>
           </div>
         </div>
+
+        <div class="doclinks">
+          <span class="lbl">詳細ドキュメント:</span>
+          <a href="docs/robot_architecture.md">ロボットアーキテクチャ</a>
+          <a href="docs/development_guide.md">開発ガイド</a>
+        </div>
       </div>
 
       <!-- SLIDE 2: 地図作成機能（MAPPING #1） -->
@@ -430,6 +449,12 @@ code{font-family:var(--font-mono);font-size:.92em;background:rgba(127,127,127,.1
               <li><b>LLM/YOLO/YOLO-Worldは休止。</b>ai_mode_managerがLifecycleを排他制御するため、地図作成中は同時に動かない</li>
             </ul>
           </div>
+        </div>
+
+        <div class="doclinks">
+          <span class="lbl">詳細ドキュメント:</span>
+          <a href="docs/architecture_detail.md">アーキテクチャ詳細</a>
+          <a href="docs/mode_details.md">各モードの詳細</a>
         </div>
       </div>
 
@@ -551,6 +576,12 @@ code{font-family:var(--font-mono);font-size:.92em;background:rgba(127,127,127,.1
         <div class="keyidea" style="margin-top:16px;">
           <div class="tag">WHY</div>
           <p><b>「ゲートと無関係な場所へ動いていく」ように見えた問題への対策。</b>緑の球は <code>gvd_gate</code> 由来の候補しか描かないため、OPEN-BOUNDARY や OPENING のゴールはRVizに一切現れなかった。ゴール源を色と文字で出すことで、その移動が設計どおりか事故かを走行中に判別できる。</p>
+        </div>
+
+        <div class="doclinks">
+          <span class="lbl">詳細ドキュメント:</span>
+          <a href="docs/mode_details.md">各モードの詳細</a>
+          <a href="docs/logging_map.md">ログの探し方</a>
         </div>
       </div>
 
@@ -757,6 +788,12 @@ code{font-family:var(--font-mono);font-size:.92em;background:rgba(127,127,127,.1
           <div class="tag">WHY</div>
           <p><b>ゲートは「通路の候補」であって「通れる保証」ではない。</b>だから失敗の記帳（退役・ペナルティ・再武装）まで含めて初めて探索が終わる。RVizで緑球が減っていく様子は、そのまま「試して潰した候補の履歴」になっている。</p>
         </div>
+
+        <div class="doclinks">
+          <span class="lbl">詳細ドキュメント:</span>
+          <a href="docs/mode_details.md">各モードの詳細</a>
+          <a href="docs/engineering_decisions.md">設計判断ログ（Issue形式）</a>
+        </div>
       </div>
 
       <!-- SLIDE 5: 人追従機能（FOLLOW #1-2） -->
@@ -814,6 +851,12 @@ code{font-family:var(--font-mono);font-size:.92em;background:rgba(127,127,127,.1
                 <ul><li>自然言語で対象を指定</li><li>CLIPは色を無視→HSV検証</li><li>LLMが日本語→英語へ翻訳</li></ul></div>
             </div>
           </div>
+        </div>
+
+        <div class="doclinks">
+          <span class="lbl">詳細ドキュメント:</span>
+          <a href="docs/mode_details.md">各モードの詳細</a>
+          <a href="docs/robot_architecture.md">ロボットアーキテクチャ</a>
         </div>
       </div>
 
@@ -898,6 +941,11 @@ code{font-family:var(--font-mono);font-size:.92em;background:rgba(127,127,127,.1
               <div class="note"><code>LOCALIZATION_LOST</code> / <code>NAV_UNHEALTHY</code> は別系統の安全ゲート状態（次スライド参照）。<code>follow/recovery_state</code> トピックで確認できる。</div>
             </div>
           </div>
+        </div>
+
+        <div class="doclinks">
+          <span class="lbl">詳細ドキュメント:</span>
+          <a href="docs/robot_architecture.md">ロボットアーキテクチャ</a>
         </div>
       </div>
 
@@ -1026,6 +1074,12 @@ code{font-family:var(--font-mono);font-size:.92em;background:rgba(127,127,127,.1
             </div>
           </div>
         </div>
+
+        <div class="doclinks">
+          <span class="lbl">詳細ドキュメント:</span>
+          <a href="docs/safety_architecture.md">安全設計</a>
+          <a href="docs/engineering_decisions.md">設計判断ログ（Issue形式）</a>
+        </div>
       </div>
 
       <!-- SLIDE 8: 駆動系とまとめ（共通・OVERVIEW #2-3） -->
@@ -1066,6 +1120,13 @@ code{font-family:var(--font-mono);font-size:.92em;background:rgba(127,127,127,.1
             <p>"1本の追従動画を、止めずに撮り切れる設計にする。"</p>
             <div class="by">— 開発方針 / CLAUDE.md §1.1</div>
           </div>
+        </div>
+
+        <div class="doclinks">
+          <span class="lbl">詳細ドキュメント:</span>
+          <a href="docs/robot_architecture.md">ロボットアーキテクチャ</a>
+          <a href="docs/safety_architecture.md">安全設計</a>
+          <a href="docs/engineering_decisions.md">設計判断ログ（Issue形式）</a>
         </div>
       </div>
 

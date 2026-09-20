@@ -10,7 +10,7 @@
 
 | Package | Type | Role |
 |---|---|---|
-| `toyof_robot_interfaces` | ament_cmake | カスタムメッセージ定義（ObjectTrackingInfo） |
+| `toyof_robot_interfaces` | ament_cmake | カスタムメッセージ定義（ObjectTrackingInfo・ObjectFound・FleetSearchRequest/Status 等） |
 | `toyof_robot_bringup` | ament_cmake | launch ファイル・config・URDF の一元管理 |
 | `toyof_robot_vehicle` | ament_python | 車両HW制御（Pico W通信・オドメトリ・サーボ・IMU） |
 | `toyof_robot_sensor` | ament_python | ICM-20948 IMUドライバ |
@@ -20,7 +20,7 @@
 | `toyof_robot_ai_control` | ament_python | 統合制御（追従対象選択・Nav2ゴール生成・LLMエージェント・状態管理） |
 | `toyof_robot_ai_speech` | ament_python | 音声AI（STT/TTS） — `speech_io_node` |
 | `toyof_robot_observability` | ament_python | 可観測性（OTel Counter/Gauge） — `work_event_node` / `metrics_node` |
-| `toyof_robot_subagent_vision` | ament_python | F-3-1: 固定PCカメラでロボットの死角を補うマルチエージェント物体発見ノード（Isaac ROS非依存、x86/WSL2で動作） |
+| `toyof_robot_subagent_vision` | ament_python | F-3-1: 固定PCカメラでロボットの死角を補うマルチエージェント物体発見ノード（Isaac ROS非依存、x86/WSL2で動作）。F-4: オンデマンド検索要求への参加可否判定（`on_demand_policy_logic.py`、設計確定・ノード結線は未着手） |
 
 ---
 
@@ -29,7 +29,9 @@
 ```
 src/
 ├── toyof_robot_interfaces/     # カスタムメッセージ定義（ament_cmake）
-│   └── msg/ObjectTrackingInfo.msg
+│   └── msg/ObjectTrackingInfo.msg, ObjectFound.msg（agent_id・request_id付き、F-4）,
+│       FleetSearchRequest.msg, FleetSearchStatus.msg（F-4）,
+│       LocalizationSessionStatus.msg, LogEvent.msg, MetricEvent.msg, InferenceLatency.msg
 │
 ├── toyof_robot_bringup/        # 起動・設定一元管理（ament_cmake）
 │   ├── config/                 # 全パラメータ yaml
@@ -57,7 +59,9 @@ src/
 ├── toyof_robot_vehicle/        # 車両ハードウェア制御（ament_python）
 │   └── toyof_robot_vehicle/
 │       ├── pico_bridge_node.py       # Jetson↔Pico W シリアルブリッジ・cmd_velゲート(GUARD)
+│       ├── cmd_vel_guard_logic.py    # GUARD判定ロジック（コリドー方式、ROS2非依存・pytest対象）
 │       ├── wheel_odom_node.py        # エンコーダ→ホイールオドメトリ（vxのみ、N21-3）
+│       ├── wheel_odom_logic.py       # オドメトリ・スリップ/拘束検知ロジック（ROS2非依存・pytest対象）
 │       ├── laser_odom_node.py        # 並進限定レーザーオドメトリ（N24-68、既定 true で起動）
 │       ├── turret_tracker_node.py    # PIDカメラ砲塔制御
 │       ├── motor_driver_node.py      # モーター直接制御（旧実装）
@@ -110,6 +114,8 @@ src/
 │   └── toyof_robot_ai_control/
 │       ├── object_tracking_info_node.py       # YOLO検出→追従対象選択・制御誤差算出
 │       ├── follow_goal_generator_node.py      # Nav2ゴール生成・追従
+│       ├── follow_recovery_logic.py           # ロストリカバリ（Tier1先回り/Tier2探索）ロジック（ROS2非依存）
+│       ├── fleet_search_logic.py              # F-4: オンデマンド・フリート検索要求の集計ロジック（ROS2非依存、ノード結線は未着手）
 │       ├── follow_path_generator_node.py      # Nav2 FollowPath制御
 │       ├── person_follower.py                 # シンプル追従（旧実装）
 │       ├── llm_agent_node.py                  # LLMエージェント（脳）
@@ -135,7 +141,8 @@ src/
 ├── toyof_robot_subagent_vision/  # F-3-1: 固定PCカメラの死角補完（ament_python、Isaac ROS非依存）
 │   └── toyof_robot_subagent_vision/
 │       ├── subagent_vision_node.py    # YOLO-World(CPU) → AprilTag較正の床面ホモグラフィでmap(x,y)投影 → /fleet/object_found
-│       └── subagent_vision_logic.py   # 較正・投影ロジック（ROS2非依存）
+│       ├── subagent_vision_logic.py   # 較正・投影ロジック（ROS2非依存）
+│       └── on_demand_policy_logic.py  # F-4: 検索要求への参加可否・モデル寿命判定ロジック（ROS2非依存、ノード結線は未着手）
 │
 ├── image_pipeline/             # ROS2 image_pipeline（外部）
 └── isaac_ros_compression/      # Isaac ROS画像圧縮（外部）
@@ -149,14 +156,16 @@ isaac_ros-dev/
 │   ├── jetson/                     # Jetson 用カスタム Dockerfile（Dockerfile.robotcar）・起動スクリプト（run_detached.sh, entrypoint_additions/）
 │   ├── observability/              # OTel Collector + Prometheus + Grafana（docker-compose、dev/prod構成）
 │   ├── pi3-robo/                   # Raspberry Pi 3をカメラノード（死角補完用）として使うDocker環境。README付き
+│   ├── lichtblick/                 # N-VIZ-1: Lichtblick単一画面UI（docker-compose.yml、:8080）。README付き
 │   └── sim/                        # x86 Gazebo シミュレーション環境
 │       ├── Dockerfile / docker-compose.yml / entrypoint.sh / run_mapping_test.sh
 ├── models/                         # TensorRT engines / ONNX models (.gitignore 対象)
 ├── map/                            # SLAM maps
 ├── local/
 │   ├── observability/              # Jetson ホスト向け OTel Collector 設定
-│   └── monitoring/                 # PC（WSL）向け Prometheus + Grafana
-├── bringups/                       # Shell bringup scripts
+│   ├── monitoring/                 # PC（WSL）向け Prometheus + Grafana
+│   └── lichtblick/                 # N-VIZ-2: レイアウトJSON生成（generate_layout.py等）・fleet_view/combined_view
+├── bringups/                       # Shell bringup scripts（robot_ns.sh: namespace解決関数、bringup_foxglove.sh 等）
 ├── docs/
 ├── tools/
 ├── index.html / .nojekyll          # showcase公開（GitHub Pages）用トップページ・Jekyll無効化

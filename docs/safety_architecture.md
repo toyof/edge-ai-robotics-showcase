@@ -100,6 +100,14 @@ tag_localization_manager ＋ Nav2 velocity_smoother ＋ teleop）あり、個々
 箇所へ安全チェックを足すだけでは「どこか1つが暴走すれば同じ事故が再発する」構造が
 残る（実例: T-AT-6-21 AMCL共分散発散インシデント）。
 
+**⚠ `foxglove_bridge`（N-VIZ-1）経由の外部クライアントも同じ入口を通る。** `hardware_bringup.launch.py`
+が既定 `true` で常時起動する WebSocket ブリッジ（Lichtblick 単一画面UI用）は、既定
+`foxglove_allow_control:=true` で同じ WiFi にいる誰でも `/cmd_vel` を publish できる**無認証**の
+経路になる（2026-09-19、CPU/メモリ実測前にユーザー判断で許容）。**この経路にも GUARD は等しく効く**
+——ただしそれは安全装置であって認証ではない。信用できないネットワークでは `foxglove_allow_control:=false`
+（観測専用）または `foxglove_bridge:=false` でロールバックする。物理的な非常停止の代わりにはならない点は
+teleop 等の既存経路と同じ。詳細 → `docs/design_notes.md` §6.13。
+
 モーターへの唯一の出口である `pico_bridge_node`（sim では `pico_stub_node`）の
 `cb_cmd_vel` で、発生源を問わず前進成分（`linear.x > 0`）のみをゲートする。
 `/scan_body_filtered`（自車体のみ除去・追従対象は残すスキャン、詳細 →
@@ -149,6 +157,19 @@ GUARD が一瞬止めるだけでは「壁に張り付いたまま前進を送�
 達したらロボット全体を安全停止する。同一ウェイポイントへの連続ブロックは
 `PatrolGuardSkipTracker`（`guard_block_patrol_skip_count` 既定2）でスキップする
 （GVD/Frontier探索は対象外）。実機E2E確認済み。詳細 → CLAUDE.md §6.7 N13-4。
+
+**GUARD起因の安全停止からの自力復帰（N24-87、実装済み・実機検証は未実施＝N24-87b）**: 上記の
+安全停止は、ゲートA（AMCL共分散発散）には T-AT-6-23 の自力復帰があるのに GUARD 側にだけ無い、
+という非対称を抱えていた（発火後プロセス再起動まで永久に動かない）。`GuardRecoveryPlanner`
+（`localization_safety_logic.py`）が ①前方が `guard_recovery_clear_hold_sec`（3.0秒）**連続**で
+開いている ②自己位置が健全、の AND で再武装する。**知覚の生死は復帰条件に含めない**（途絶して
+いるなら追従自体が成立せず停止が正しい＝§3.4 P8-13 の担当）。予算は「一か所あたり」
+（`guard_recovery_same_place_radius_m` 1.0m 以内を同じ場所とみなし `guard_recovery_max_attempts_per_place`
+3回まで）。**⚠ 復帰条件①の判定に `/cmd_vel_guard/blocked` は使わない**——GUARD は cmd_vel 受信時に
+しか評価しないため、停止中は前方が実際には開いていても値が更新されず古いままになりうる。ライブ
+LiDAR スキャンを直接見て判定する。復帰余地があるうちは追従モードを畳む `activate:llm` を送らない
+（送ると復帰先そのものが消える）。ロールバックは `guard_recovery_enabled: false`。詳細 →
+CLAUDE.md §6.7 N24-87。
 
 ## 3.3 3層の安全ゲート（T-AT-6-21）
 
@@ -208,6 +229,33 @@ RVizで目視発見。ログ・既存の安全ゲートいずれにも異常値�
   無しの暫定値で、実機検証は未実施。
 
 詳細 → CLAUDE.md §6.7 N24-83、`docs/design_notes.md` N24-83、`todo/navigation.md` N24-83。
+
+## 3.6 EKF/wheel_odom 自身の共分散発散を検知する安全ゲート（N24-88、実装済み・実機未検証）
+
+`yolo`/AMCL 経路（SLAM/mapping ではない）には、wheel_odom/EKF 自身の発散を検知する安全ゲートが
+無かった。T-AT-6-21 ゲートAは AMCL 自身の共分散発散を見るだけで、N24-83（§3.5）は
+`mapping_lifecycle_node` 限定で map/odom フレームの乖離を見るだけであり、どちらも
+「wheel_odom/EKF という入力そのものの内部発散」は見ていない。2026-09-16 のバッテリー駆動
+セッションで、`[GUARD]` 前進停止が続く一方 `angular.z` は維持される仕様（N13系）のため不感帯
+補償(KICK/STALL)とSLIP DETECTEDが約1分間断続的に発生し続け、`/odometry/filtered` の推定が
+大きくずれて共分散が発散した事象を受けて設計。
+
+`EkfDivergenceMonitor`（`localization_safety_logic.py`）は T-AT-6-21 ゲートAの `AmclHealthMonitor`
+と同型のデバウンス方式で発散を検知するが、決定的に異なる設計判断が1つある: **EKF は dead
+reckoning のため外部の絶対補正を持たず、健全なサンプルが来ても自然に収束しない。** そのため
+「健全なサンプルが来たら自動で復帰」は実装せず、**一度確定した発散は明示的に `reset()` するまで
+解除されない**。復帰の実行は `EkfRecoveryPlanner` が担い、成否を判定せず
+①（手狭なら）開けた方向へ短く移動 → ②静止して `ekf_recover_cooldown_sec`（3.0秒、ZUPTが効く時間を
+作る）待つ → ③ `/request_nomotion_update` を規定回数叩く、という固定シーケンスを1回実行して
+必ず完了に達する（問題が続けば次のサイクルで再度検知する）。移動フェーズは既存のESCAPE機構
+（`escape_spin`→`escape_nudge_fwd`）をGUARDゲート済み `cmd_vel` で再利用するため、EKFの自己位置
+健全性に依存せず安全（GUARDはライブLiDARで判定、EKFのpose推定は使わない）。
+
+新規パラメータ: `ekf_divergence_enabled`（既定true）/ `ekf_divergence_x_var_max`・
+`ekf_divergence_y_var_max`（既定50.0、**実機未較正の暫定値**）/ `ekf_divergence_consecutive`
+（既定3）/ `ekf_recover_cooldown_sec`（既定3.0）。ロールバックは `ekf_divergence_enabled: false`。
+
+詳細 → CLAUDE.md §6.7 N24-88、`docs/design_notes.md` §6.7 N24-88、`todo/navigation.md` N24-88。
 
 ---
 

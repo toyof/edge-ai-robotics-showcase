@@ -116,8 +116,8 @@ not been captured on video yet.
 | Metric | Value | Notes |
 |---|---|---|
 | Custom ROS2 packages | 11 | `src/toyof_robot_*` |
-| ROS2-free pure-logic modules | 43 | `*_logic.py`, runnable under `pytest` with no robot and no container (→ [Show Me the Code](#show-me-the-code)) |
-| Automated tests | ~1,870 across 70 files | Mostly against the pure-logic modules above; excludes lint tests (flake8 / pep257 / copyright, 27 files) |
+| ROS2-free pure-logic modules | 45 | `*_logic.py`, runnable under `pytest` with no robot and no container (→ [Show Me the Code](#show-me-the-code)) |
+| Automated tests | ~1,940 across 73 files | Mostly against the pure-logic modules above; excludes lint tests (flake8 / pep257 / copyright, 27 files) |
 | CI | GitHub Actions | Runs the pytest suite above plus flake8 / pep257 (docstring rules) on every push |
 
 > Measurement environment: Jetson Orin Nano 8GB, JetPack 6, Isaac ROS Dev Container

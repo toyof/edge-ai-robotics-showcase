@@ -94,7 +94,14 @@ pico_bridge_node ──→ /pico/rev_*        (エンコーダ生値)
 
 wheel_odom_node (/pico/rev_* + 速度依存補正) ──→ /wheel_odom
 
+laser_odom_node (/scan_target_filtered + /imu/data_aligned + /wheel_odom、既定 true で起動、N24-68)
+  ──→ /laser_odom, /laser_odom/motion_evidence  (並進限定・観測専用。EKFへは未接続)
+
 ekf_filter_node (/wheel_odom + /imu/data_aligned) ──→ /odometry/filtered → Nav2
+
+foxglove_bridge（既定 true で起動、N-VIZ-1。Lichtblick 単一画面UIのWebSocket出口 :8765）
+  ⇄ 全トピック・サービス・パラメータ（クライアントが購読したものだけ配信）
+  ⚠ 既定 foxglove_allow_control:=true は無認証で /cmd_vel 等の publish を許可する（→ docs/safety_architecture.md §3.1）
 
 ai_perception_container（常駐 ComposableNodeContainer）
   └── v4l2_camera ──→ /image_raw + /camera_info
@@ -426,6 +433,7 @@ cov_vx: 0.001
 | `slip_imu_timeout` | `0.2` s | IMU データが古いとみなすタイムアウト |
 | `slip_reject_speed_mps` | `0.15` m/s | 並進棄却の閾値（`0.0` でロールバック） |
 | `slip_translation_enable` | `false`（退役、N24-70） | laser_odom併用の瞬時速度比較軸（旧・現在は下記の拘束検知へ移行） |
+| `slip_min_dt` | `0.08` s（既定 `0.0`＝無効、ノード側で明示有効化、N24-90） | この秒数未満のサイクルはスリップ判定自体をスキップ。Picoエンコーダ更新が短間隔で連続すると量子化ノイズで `w_wheel`/`a_wheel` が非物理的な値へ跳ね上がり誤検知するため |
 
 ### 拘束検知（N24-70/N24-73）— 「車輪は進んだのに外界が動かない」
 
@@ -519,7 +527,7 @@ ROS と MCU の二重停止機構により、片方が死んでもロボット�
 
 ---
 
-# 13 マルチエージェント連携（フリート、F-3-1）
+# 13 マルチエージェント連携（フリート、F-1 / F-4）
 
 上記1〜12は単一ロボット（Jetson Orin Nano）内で完結する構成。これとは独立に、
 **固定PCカメラで死角を補完するサブエージェント**（`toyof_robot_subagent_vision`、
@@ -529,12 +537,40 @@ Isaac ROS非依存・x86/WSL2で動作）が同じ map 座標系を共有する�
 固定PCカメラ（x86/WSL2） → subagent_vision_node
   ├─ YOLO-World でゼロショット検出
   ├─ 較正済み外部パラメータ（AprilTagで較正）で画像座標 → map座標へ変換
-  └─ /fleet/object_found を publish（agent_id 付き）
+  └─ /fleet/object_found を publish（agent_id・request_id 付き、F-4でrequest_id追加）
 ```
 
-Jetson側とはトピック直書きではなく `map/rooms/<name_id>/objects.yaml` 経由の座標共有を基本とし、
-`frame_prefix`/`ns` パラメータ化で複数ロボットへの拡張にも対応する設計。詳細（トピック衝突回避・
-`agent_id` 設計・実装状況）→ [`todo/multi_agent_fleet.md`](../todo/multi_agent_fleet.md)。
+**F-1（常時共有、実装済み・sim E2E確認済み）**: Jetson側とはトピック直書きではなく
+`map/rooms/<name_id>/objects.yaml` 経由の座標共有を基本とし、競合は timestamp 最新優先
+（`query_latest_object()`）。自分の `agent_id` の publish は無視して自己ループを防ぐ。
+`frame_prefix`/`ns` パラメータ化で複数ロボットへの拡張にも対応する設計。
+
+**F-4（オンデマンド・フリート知覚、設計確定・純ロジックのみ実装、ノード結線は未着手）**:
+複数カメラの常時推論をやめ、「検索要求が来たときだけ」推論する設計。
+
+```
+要求側（ロボット） ──/fleet/search_request(ブロードキャスト)──→ 各カメラ
+  参加可否は各カメラが自分の name_id で自律的に決める（要求側にフリート構成表を持たせない）
+  待ちは2段: ACK窓 2.0s → 結果締切 30.0s
+  参加者0台なら2秒で打ち切り、従来の自力索敵へフォールバック（ロボット単独運用は不変）
+```
+
+オンデマンドの実体は**モデルの遅延ロードと画像購読の張り外し**であり、推論のスキップだけでは
+帯域は空かない点に注意（WiFi帯域を消費しているのは常時稼働の画像購読そのもの）。要求側の集計
+ロジックは `fleet_search_logic.py`、カメラ側の参加可否・モデル寿命判定は `on_demand_policy_logic.py`
+（いずれも `toyof_robot_ai_control`/`toyof_robot_subagent_vision` の純ロジック、ROS2非依存）。
+実際に止めるべき購読は `subagent_vision_node` 自身ではなく `image_republish_node`（現行の
+`subagent_vision.launch.py` が挟む中継ノード）で、対処は republish を廃し `subagent_vision_node` が
+`CompressedImage` を直接購読するよう変更すること（未実装）。
+
+**⚠ フリートは RMW 混在のまま動いている**（Jetson のみ `rmw_cyclonedds_cpp`、PC/Pi3 は Humble
+既定の `rmw_fastrtps_cpp`）。3ホストで `toyof_robot_interfaces` のビルドを揃えないと、メッセージ型の
+変更（`ObjectFound.msg` への `request_id` 追加等）が DDS の型ハッシュ不一致として現れ、購読が
+**エラーもログも無く黙って不成立**になる。
+
+詳細（トピック衝突回避・`agent_id` 設計・実装状況・DDS設計）→
+[`todo/multi_agent_fleet.md`](../todo/multi_agent_fleet.md) / `docs/fleet_on_demand_search_design.md`
+（F-4全文） / `docs/fleet_dds_design.md`（RMW/ドメイン設計）。
 
 ---
 

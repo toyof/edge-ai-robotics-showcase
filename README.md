@@ -104,8 +104,8 @@
 | Metric | Value | 備考 |
 |---|---|---|
 | カスタムROS2パッケージ数 | 11 | `src/toyof_robot_*` |
-| ROS2 非依存の純ロジックモジュール | 43 | `*_logic.py`。実機・コンテナなしで `pytest` 可能（→ [Show Me the Code](#show-me-the-code)） |
-| 自動テスト | 約1,870 件 / 70 ファイル | 上記の純ロジック中心。lint 自動テスト（flake8 / pep257 / copyright、27ファイル）は除く |
+| ROS2 非依存の純ロジックモジュール | 45 | `*_logic.py`。実機・コンテナなしで `pytest` 可能（→ [Show Me the Code](#show-me-the-code)） |
+| 自動テスト | 約1,940 件 / 73 ファイル | 上記の純ロジック中心。lint 自動テスト（flake8 / pep257 / copyright、27ファイル）は除く |
 | CI | GitHub Actions | 上記 pytest ＋ flake8 / pep257（docstring 規約）を push ごとに実行 |
 
 > 計測環境: Jetson Orin Nano 8GB, JetPack 6, Isaac ROS Dev Container

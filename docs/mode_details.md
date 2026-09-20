@@ -941,6 +941,9 @@ recovery_mode:=off の場合（変更なし）:
 | `map_mode` | `slam` | Tier2 探索バックエンド切替。`slam`: `GvdExplorer`/`FrontierExplorer`（未知領域への隣接が前提）。`existing`: `tag_db.yaml` に部屋アンカーが2件以上なら `RoomPatrolExplorer`（部屋を直接巡回, P7-3）、0〜1件（＝選ぶ余地がない）なら `PatrolExplorer`（既定 `wall_follow`、地図の縁を巡回, N11-7, T-27-5） |
 | `goal_mode` | `continuous` | `continuous`: 毎周期ゴールを再計算・再送。`lock_once`: 初回の有効検出でゴールを1回だけ確定送信し、Nav2完了まで再計算しない（静止物体向け, T-23） |
 | `search_giveup_timeout_sec` | 60.0 s | Tier2 探索の最終タイムアウト（下記「諦めない」挙動の唯一の終端） |
+| `recovery_heading_min_consistency` | 0.45（T-47で0.6導入・T-51で暫定緩和） | Tier1 予測方向の信用しきい値（mean resultant length R、0〜1）。breadcrumb の向きがこれ未満なら「方向不明」として外挿せず最終目撃点をゴールにする。距離ではなく向きの一貫性で判断するのは、人が往復すると正味変位は大きいまま向きだけ逆転しうるため（2026-09-18実機でTier1が真逆へ2回走り障害物へ突っ込んだ事故を受けて導入）。診断ログ `[RECOVERY/Tier1] heading gate: ...` で R値を確認できる（判定には不使用）。ロールバックは `0.0` |
+| `recovery_heading_min_segments` | 3（T-47） | 上記R値算出に必要な最小breadcrumbセグメント数 |
+| `tier1_goal_clamp_enabled` | `true`（T-48） | Tier1予測ゴールを送信前に地図で到達可能性を検査し、占有・未知なら予測線分上を最終目撃点へ後退させる（`clamp_goal_to_free()`）。**既存地図（`map_mode='existing'`）限定、SLAM中・地図無しはno-op**（未知セルは人が実際に歩いた場所のため弾かない）。Nav2は占有セル上のゴールを拒まず突っ込む（2026-09-18実機、最後にGUARDが物理的に止めた）ことを受けて導入 |
 
 いずれの `map_mode` でも、Tier2 探索エンジン生成時に `FollowRecoveryLogic.search_anchor()`
 （Tier1突入時の予測ゴール＝人が向かった先）を `room_bias_x/y` / `patrol_bias_x/y` として渡し、
