@@ -95,7 +95,7 @@ KICK 39件があり、**N23-5 のスリップ棄却も3件発火していた**�
 | `scan_filter_node` | LiDAR の自車体・追従対象マスク | `toyof_robot_vehicle` | `BoxFilter` | SUB `scan` / PUB `scan_body_filtered`, `scan_target_filtered` |
 | `ydlidar_ros2_driver_node` | LiDAR ドライバ | `ydlidar_ros2_driver` | — | PUB `scan` |
 | `robot_state_publisher` | URDF → TF（`frame_prefix` で namespace 対応） | `robot_state_publisher` | — | PUB `/tf`, `/tf_static` |
-| `work_event_node` | 可観測性: 作業イベント→OTel | `toyof_robot_observability` | `[work_event]` `[mission]` | SUB `follow/recovery_state`, `observability/log_event` |
+| `work_event_node` | 可観測性: 作業イベント→OTel | `toyof_robot_observability` | `[work_event]` `[mission]` | SUB `status/activity`, `observability/log_event` |
 | `metrics_node` | 可観測性: tegrastats/vmstat/トピックレート→OTel | `toyof_robot_observability` | `[latency]` `OTel` | SUB `object_tracking/info` ほか |
 | `pico_stub_node` | （sim のみ）Pico の代替。GUARD は実機と同一ロジック | `toyof_robot_vehicle` | `[GUARD]` `[PicoStub]` | 実機の `pico_bridge_node` と同じ |
 | `imu_sim_node` | （sim のみ）IMU 代替 | `toyof_robot_vehicle` | `[imu_sim]` | PUB `imu/data_raw` |
@@ -125,7 +125,7 @@ KICK 39件があり、**N23-5 のスリップ棄却も3件発火していた**�
 
 | ノード | 担当機能 | パッケージ | 代表ログタグ | 主要トピック |
 |---|---|---|---|---|
-| `ai_mode_manager_node` | AIモードの排他ローテーション・地図確立ゲート・メモリ予算ゲート | `toyof_robot_ai_control` | `[ai_mode_manager]` `[lifecycle]` `[warmup]` | SUB `state_manager/command` / PUB `state_manager/status` |
+| `ai_mode_manager_node` | AIモードの排他ローテーション・地図確立ゲート・メモリ予算ゲート・命令のsingle-flight受付（T-55） | `toyof_robot_ai_control` | `[ai_mode_manager]` `[lifecycle]` `[warmup]` | SUB `state_manager/command` / SRV `mode/request`, `mode/stop` / PUB `status/lifecycle`, `status/activity` |
 | `localization_session_manager_node` | 地図確立（タグ前スキャン→既存マップ or SLAM）の一元管理 | `toyof_robot_ai_control` | `[localization_session]` | PUB `localization_session/status` |
 | `follow_goal_generator_node` | **追従ゴール生成とロスト時リカバリ（Tier1/Tier2）・安全ゲート群** | `toyof_robot_ai_control` | `[SAFETY]` `[FOLLOW]` `[RECOVERY]` `[STOP]` `[TRAIL]` `[CAPTURE]` | SUB `amcl_pose`, `cmd_vel_guard/blocked`, `wheel_odom/slip`, `scan_body_filtered` / PUB `cmd_vel`, `follow/person_*` |
 | `object_tracking_info_node` | 検出のトラッキング（IoU）とターゲット選択 | `toyof_robot_ai_control` | `[T-29-6]` `Target` `LOST` | SUB `detections_output`, `target_id` / PUB `object_tracking/info` |

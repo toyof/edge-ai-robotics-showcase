@@ -192,7 +192,13 @@ wheel_odom誤差蓄積→AMCLパーティクルフィルタ発散→Nav2連続RE
 **ESCAPE が旋回ゲートに阻まれた場合のフォールバック（N13-9d-2）**: 前進ノッジ→後退→
 安全停止の順に切り替える（`escape_rotation_block_sec` 既定1.0秒）。
 
-詳細 → CLAUDE.md §6.7、`todo/apriltag_localization.md` T-AT-6-21 / T-AT-6-23。
+**ESCAPE の旋回方向は安全マージンを満たす候補の中から予測位置寄りを選ぶ（N24-89、実機未検証）**:
+「最も開いた方位」だけで決めていた旧実装を、`best_escape_heading(bias_bearing_rad=...)` で
+Tier1先回りゴール／Tier2現在ゴールに近い方位を優先するよう変更（`min_clear_m` の安全マージン
+自体は不変）。無効化・従来動作へのロールバックは `guard_escape_bias_to_goal: false`。
+
+詳細 → CLAUDE.md §6.7、`todo/apriltag_localization.md` T-AT-6-21 / T-AT-6-23、
+`todo/navigation.md` N24-89。
 
 ## 3.4 知覚メッセージ完全途絶の即時安全停止（P8-13）
 

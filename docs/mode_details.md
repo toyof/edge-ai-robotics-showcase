@@ -4,6 +4,12 @@
 
 > 動作確認コマンド（テスト手順）は [`development_guide.md`](development_guide.md) を参照。
 
+> **T-55（2026-09-24）以降、モード切替命令は単一実行（single-flight）**——遷移中の命令は
+> `BUSY` で即拒否される。本ファイルのコマンド例は `/state_manager/command` への `topic pub`
+> のままだが、これは受付判定を通る「送りっぱなし」経路として現在も動作する。受付結果
+> （`ACCEPTED`/`BUSY`等）を確認したい場合はサービス `mode/request`（`toyof_robot_interfaces/srv/SwitchMode`）
+> を使う（→ `docs/robot_architecture.md` §該当節、CLAUDE.md §6.6 T-55）。
+
 ---
 
 ## mapping モード — SLAM + フロンティア探索による自律地図作成
@@ -850,7 +856,8 @@ ros2 launch toyof_robot_bringup ai_core_managers.launch.py \
 
 ```bash
 # recovery_mode と goal_frame が正しく設定されているか
-ros2 topic echo /follow/recovery_state   # FOLLOWING / TIER1 / TIER2 / GIVEUP
+ros2 topic echo /status/activity   # YOLO:FOLLOWING / YOLO:TIER1 / YOLO:TIER2 / YOLO:GIVEUP
+                                   # （T-42b。yoloworld は YOLOWORLD:、mapping は MAPPING:<PHASE>）
 
 # 追従状態
 ros2 topic echo /object_tracking/info --once
@@ -920,7 +927,7 @@ lifecycle_manager_standalone
               map_mode=<確立済みセッションのmap_mode>, trail_follow=true既定)
             turret_tracker_node
   → activate yolo_follow_node
-      追従開始。/follow/recovery_state: FOLLOWING
+      追従開始。/status/activity: YOLO:FOLLOWING
       ロスト後 1.5s → TIER1（先回り Nav2 ゴール。trail_follow=true ならゴールを
         軌跡(breadcrumb)上の対象手前 dist_offset 点に置く。T-27）
       Tier1 タイムアウト 8s → TIER2（map_mode=slam: フロンティア/GVD探索、

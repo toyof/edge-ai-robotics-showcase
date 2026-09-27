@@ -32,6 +32,7 @@ src/
 │   └── msg/ObjectTrackingInfo.msg, ObjectFound.msg（agent_id・request_id付き、F-4）,
 │       FleetSearchRequest.msg, FleetSearchStatus.msg（F-4）,
 │       LocalizationSessionStatus.msg, LogEvent.msg, MetricEvent.msg, InferenceLatency.msg
+│       srv/SwitchMode.srv（モード切替命令の受付、T-55）
 │
 ├── toyof_robot_bringup/        # 起動・設定一元管理（ament_cmake）
 │   ├── config/                 # 全パラメータ yaml
@@ -121,6 +122,8 @@ src/
 │       ├── llm_agent_node.py                  # LLMエージェント（脳）
 │       ├── robot_agent.py                     # ROS2コマンドディスパッチ・Gemini VLM
 │       ├── ai_mode_manager_node.py            # AI モード排他制御マネージャー（旧 state_manager）
+│       ├── mode_admission_logic.py            # モード切替命令の受付ゲート（single-flight、ROS2非依存、T-55）
+│       ├── control_mode_logic.py              # 運用モード(auto/manual)判定ロジック（ROS2非依存、T-53）
 │       ├── yolo_follow_lifecycle_node.py      # YOLOv8 物体追従 Lifecycle ノード（Step 3）
 │       ├── yoloworld_lifecycle_node.py        # YOLO-World + Depth Anything 物体探索（Step 4）
 │       ├── yoloworld_worker_main.py           # yoloworld サブプロセスワーカー
@@ -163,8 +166,12 @@ isaac_ros-dev/
 ├── map/                            # SLAM maps
 ├── local/
 │   ├── observability/              # Jetson ホスト向け OTel Collector 設定
-│   ├── monitoring/                 # PC（WSL）向け Prometheus + Grafana
-│   └── lichtblick/                 # N-VIZ-2: レイアウトJSON生成（generate_layout.py等）・fleet_view/combined_view
+│   ├── robot_ops/                  # N-VIZ-1〜22: 運用UI一式（レイアウトJSON生成・combined_view/fleet_view.html・Lichtblick拡張パネル extension/）
+│   ├── ssh_terminal/               # N-VIZ-19: ttyd経由のWebターミナル帯セットアップ
+│   ├── rviz/                       # RViz設定生成（generate_rviz.py・SLAM/NAV2/follow_human.rviz）
+│   ├── showcase_publish/           # 公開用showcaseリポジトリへの同期スクリプト
+│   ├── docs_update_cron/           # このドキュメント更新スキルの週次無人実行（cron）
+│   └── daily_summary_cron/         # 日次作業サマリーのLINE通知（cron）
 ├── bringups/                       # Shell bringup scripts（robot_ns.sh: namespace解決関数、bringup_foxglove.sh 等）
 ├── docs/
 ├── tools/

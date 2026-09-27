@@ -472,14 +472,15 @@ per-alert runbook → [docs/observability_runbook.md](docs/observability_runbook
 | Status | Scope |
 |---|---|
 | **Built, running on the robot** | OTel Collector → Prometheus → Grafana (resident under systemd on the Jetson) · three-tier drill-down dashboards · closed log/metric vocabulary enforced in CI · the three-layer safety gate (fired and auto-recovered on real hardware) |
-| **Built, verified against a stub stack** | SLO / error budget (two-stage multi-window burn-rate alerts). Currently only S4 (availability) and S5 (pipeline freshness); not yet wired to real-robot metrics · per-alert runbooks (thresholds and responses exercised only against synthetic dev data, never a real incident) |
+| **Built, verified against a stub stack** | SLO / error budget (two-stage multi-window burn-rate alerts). Now four indicators — S1 (follow success rate), S2 (lost-recovery time), S4 (availability), S5 (pipeline freshness); not yet wired to real-robot metrics · liveness alerts for the main ROS2 nodes (9 alerts) · per-alert runbooks (thresholds and responses exercised only against synthetic dev data, never a real incident) |
 | **Designed, not built** | Fleet control for N robots (`kubectl scale`) · Azure AKS + GitOps · Terraform IaC · closing the alert → auto-remediation loop |
 
 **Scaling to a fleet (design)**: the OTel Collector's `service.instance_id` lets
 metrics from multiple robots aggregate into a single Prometheus instance; adding a
 second robot is designed to be a matter of duplicating the dashboard.
 
-→ [docs/observability_detail.md](docs/observability_detail.md)
+→ [docs/observability_detail.md](docs/observability_detail.md) (single-robot observability stack detail) /
+[docs/robot_sre_design.md](docs/robot_sre_design.md) (fleet control-plane design doc: SLI/SLO definitions, technology choices, IaC/AKS design, with built vs. designed-only scope called out)
 
 ---
 
@@ -618,6 +619,7 @@ the behaviour can be reproduced in the x86 Gazebo simulation (`robotcar-sim`).
 | [docs/architecture_detail.md](docs/architecture_detail.md) | ROS2 node graph, layered design detail, sensor fusion |
 | [docs/development_guide.md](docs/development_guide.md) | Build and test procedures |
 | [docs/observability_detail.md](docs/observability_detail.md) | OTel stack layout, file placement |
+| [docs/robot_sre_design.md](docs/robot_sre_design.md) | Fleet control-plane design doc (SLI/SLO definitions, technology choices, IaC/AKS design; built vs. designed-only scope called out) |
 | [docs/serial_deadlock_analysis.md](docs/serial_deadlock_analysis.md) | UART deadlock investigation log |
 | [docs/tof_blocking_analysis.md](docs/tof_blocking_analysis.md) | I2C blocking investigation log |
 | [docs/lidar_intensity_ghost_analysis.md](docs/lidar_intensity_ghost_analysis.md) | LiDAR obstacle-ghost investigation log (intensity filter) |

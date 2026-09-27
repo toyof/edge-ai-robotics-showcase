@@ -230,12 +230,18 @@ deactivate(current)
 - drop_caches の実施タイミングはノードごとに異なる（重いモデルロード直前）: yolo_follow は `ai_perception_container` kill+sleep 直後、yoloworld は worker `Popen` 直前、llm は llama-server 起動直前（`process_utils.drop_page_cache()`）
 - yolo / yoloworld が `deactivate:X` で停止した後は `ai_mode_manager_node` が自動で `activate:llm` を発行し LLM モードへ復帰する。ノード自身が終了する場合（yolo ストップワード・yoloworld タイムアウト/発見）はノード側が直接 `activate:llm` を publish するため二重起動にはならない
 
-切り替えコマンド: `/state_manager/command` トピックに `"activate:llm"` 等を publish。
+切り替えコマンド: サービス `mode/request`（`toyof_robot_interfaces/srv/SwitchMode`）に `"activate:llm"` 等を送ると、受付結果（`ACCEPTED` / 遷移中なら `BUSY` …）が返る。従来の `/state_manager/command` トピックも同じ受付判定を通る（断られても送り手には返らない）。**遷移は同時に1つだけで、遷移中の命令は並べずに即拒否する**（T-55、`docs/design_notes.md`）。
+
+| サービス | 型 | 役割 |
+|---|---|---|
+| `mode/request` | `toyof_robot_interfaces/srv/SwitchMode` | 遷移命令（`activate:<mode>[:<object>]` / `deactivate:<mode>` / `stop` / `mode:auto\|manual`）と、副作用の無い問い合わせ `status`（受付中の命令・制御モード） |
+| `mode/stop` | `std_srvs/srv/Trigger` | いま動いているモードを停止（標準型なので独自型が解決できない環境でも届く） |
 
 | トピック | 型 | 役割 |
 |---|---|---|
-| `/state_manager/command` | `std_msgs/String` | 遷移コマンド（`"activate:llm"` 等） |
-| `/state_manager/status` | `std_msgs/String` | 現在のシステム状態 |
+| `/state_manager/command` | `std_msgs/String` | 遷移コマンド（`"activate:llm"` 等）。LLM・他ノードの経路。受付判定は `mode/request` と共通 |
+| `/status/lifecycle`（旧 `/state_manager/status`） | `std_msgs/String` | 走っているか＋どのモードか（`IDLE`/`TRANSITIONING`/`"ACTIVE:<MODE>"` → T-42で新設、T-52でACTIVE時にモード名付与へ変更）。QoS は transient_local depth=1。standalone 起動時は各 LifecycleNode 自身が publish |
+| `/status/activity` | `std_msgs/String` | いま何をしているか `"<MODE>:<PHASE>[:<SUB>…]"`（`YOLO:TIER1` / `MAPPING:GATE_THROUGH` / `LLM:READY`）。旧 `/follow/recovery_state` を置換。語彙と照合規則は `activity_vocabulary.py`（T-42b、CLAUDE.md §3.6）。**購読側は基本この1本で判定が閉じる**——`/status/lifecycle` を併せて見る必要があるのはフェーズが存在しない状態（どのモードも走っていない／切替中）を知りたいときだけ |
 | `/speech/user_text` | `std_msgs/String` | speech_io_node → llm_agent_node（STT 認識テキスト） |
 | `/speech/speak_command` | `std_msgs/String` | llm_agent_node → speech_io_node（TTS 発話） |
 | `/speech/interrupt` | `std_msgs/String` | speech_io_node → llm_agent_node |
@@ -301,7 +307,7 @@ ai_perception_container へ LoadComposableNodes で動的注入:
                                      → point_cloud_xyz → /camera/depth/points
 
 /detections_output
-  → object_tracking_info_node → /object_tracking/info (PersonTrackingInfo)
+  → object_tracking_info_node → /object_tracking/info (ObjectTrackingInfo)
         ├──→ follow_goal_generator_node
         │       + /ai/target_spatial (最優先)
         │       + /pico/tof_m (第2優先、use_tof 既定 false)

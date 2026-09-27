@@ -341,7 +341,7 @@ code{font-family:var(--font-mono);font-size:.92em;background:rgba(127,127,127,.1
 
   <div class="topbar">
     <div class="badge-series"><span class="dot"></span>PERSON-FOLLOWING ROBOT SERIES</div>
-    <div class="badge-count"><span id="curNum">1</span>&nbsp;/&nbsp;8</div>
+    <div class="badge-count"><span id="curNum">1</span>&nbsp;/&nbsp;9</div>
   </div>
 
   <div class="stage">
@@ -1082,7 +1082,175 @@ code{font-family:var(--font-mono);font-size:.92em;background:rgba(127,127,127,.1
         </div>
       </div>
 
-      <!-- SLIDE 8: 駆動系とまとめ（共通・OVERVIEW #2-3） -->
+      <!-- SLIDE 8: 運用画面とフリート（共通・OVERVIEW / N-VIZ-9・N-VIZ-10） -->
+      <div class="slide">
+        <div class="slide-title-wrap">
+          <span class="track-chip overview"><span class="dot2"></span>共通基盤 — SHARED</span>
+          <div class="slide-title"><h2>運用画面とフリート</h2><span class="n">ROBOT OPS UI — ONE BROWSER TAB, N ROBOTS</span></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><span class="num">1</span><h3>一覧 → 個別、の2画面（再現イラスト）</h3></div>
+          <div class="panel-body">
+            <div class="mockup-frame">
+              <div class="mockup-titlebar">
+                <span class="dot3" style="background:#ff5f57"></span>
+                <span class="dot3" style="background:#febc2e"></span>
+                <span class="dot3" style="background:#28c840"></span>
+              </div>
+              <svg viewBox="0 0 800 320" role="img" aria-label="フリート一覧画面と個別ロボット画面の再現イラスト。左はロボットのカード一覧とフリート統計、ロボットを選ぶと右の3D表示とダッシュボードを左右に並べた個別画面へ遷移する">
+                <defs>
+                  <marker id="mk-sel" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M0,0 L10,5 L0,10 z" fill="#ff9100"></path>
+                  </marker>
+                </defs>
+                <rect x="0" y="0" width="800" height="320" fill="#0a0a0a"></rect>
+
+                <!-- fleet_view.html -->
+                <rect x="16" y="26" width="330" height="266" rx="6" fill="#14171c" stroke="#6b6f76" stroke-width="2"></rect>
+                <rect x="16" y="26" width="330" height="24" rx="6" fill="#23262b"></rect>
+                <text x="30" y="43" font-family="'IBM Plex Mono',monospace" font-size="12" fill="#c9cec6">fleet_view.html</text>
+                <text x="30" y="72" font-family="'IBM Plex Mono',monospace" font-size="11" fill="#9aa294">ROBOTS</text>
+                <rect x="28" y="80" width="150" height="46" rx="5" fill="#20241d" stroke="#ff9100" stroke-width="2"></rect>
+                <circle cx="44" cy="99" r="5" fill="#14e13c"></circle>
+                <text x="58" y="98" font-family="'IBM Plex Mono',monospace" font-size="12" fill="#eef0e8">jetson01</text>
+                <text x="58" y="115" font-family="'IBM Plex Mono',monospace" font-size="10" fill="#9aa294">192.168.x.x</text>
+                <rect x="28" y="134" width="150" height="46" rx="5" fill="#1a1d18" stroke="#4b5049" stroke-width="1.5"></rect>
+                <circle cx="44" cy="153" r="5" fill="#6b6f76"></circle>
+                <text x="58" y="152" font-family="'IBM Plex Mono',monospace" font-size="12" fill="#9aa294">（2台目）</text>
+                <text x="58" y="169" font-family="'IBM Plex Mono',monospace" font-size="10" fill="#6b6f76">fleet.json に追記</text>
+                <rect x="28" y="188" width="150" height="46" rx="5" fill="#1a1d18" stroke="#4b5049" stroke-width="1.5" stroke-dasharray="4 4"></rect>
+                <text x="58" y="216" font-family="'IBM Plex Mono',monospace" font-size="11" fill="#6b6f76">＋ add robot</text>
+                <text x="192" y="72" font-family="'IBM Plex Mono',monospace" font-size="11" fill="#9aa294">FLEET STATS (Grafana)</text>
+                <rect x="190" y="80" width="144" height="154" rx="5" fill="#101317" stroke="#4b5049" stroke-width="1.5"></rect>
+                <rect x="202" y="176" width="18" height="44" fill="#4fd9bf"></rect>
+                <rect x="228" y="150" width="18" height="70" fill="#4fd9bf"></rect>
+                <rect x="254" y="190" width="18" height="30" fill="#4fd9bf"></rect>
+                <rect x="280" y="132" width="18" height="88" fill="#4fd9bf"></rect>
+                <rect x="306" y="166" width="18" height="54" fill="#4fd9bf"></rect>
+                <text x="202" y="110" font-family="'IBM Plex Mono',monospace" font-size="10" fill="#9aa294">robot-overview</text>
+                <text x="16" y="308" font-family="'IBM Plex Mono',monospace" font-size="11" fill="#9aa294">① フリート一覧（左＝ロボ一覧／右＝全体統計）</text>
+
+                <!-- 遷移 -->
+                <line x1="352" y1="150" x2="394" y2="150" stroke="#ff9100" stroke-width="3" marker-end="url(#mk-sel)"></line>
+                <text x="373" y="138" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="11" font-weight="700" fill="#ff9100">選択</text>
+
+                <!-- combined_view.html -->
+                <rect x="404" y="26" width="380" height="266" rx="6" fill="#14171c" stroke="#6b6f76" stroke-width="2"></rect>
+                <rect x="404" y="26" width="380" height="24" rx="6" fill="#23262b"></rect>
+                <text x="418" y="43" font-family="'IBM Plex Mono',monospace" font-size="12" fill="#c9cec6">combined_view.html?robot=jetson01</text>
+                <text x="418" y="72" font-family="'IBM Plex Mono',monospace" font-size="11" fill="#9aa294">LICHTBLICK（3D・操作）</text>
+                <rect x="416" y="80" width="196" height="154" rx="5" fill="#0d1014" stroke="#4b5049" stroke-width="1.5"></rect>
+                <rect x="432" y="98" width="96" height="76" fill="#eef0ee" stroke="#050505" stroke-width="4"></rect>
+                <rect x="528" y="132" width="62" height="42" fill="#eef0ee" stroke="#050505" stroke-width="4"></rect>
+                <polygon points="486,140 466,130 466,150" fill="#ff7a1a" stroke="#ffffff" stroke-width="1.2"></polygon>
+                <circle cx="546" cy="118" r="6" fill="#7ec8ff" stroke="#0a0a0a" stroke-width="1"></circle>
+                <path d="M486,140 L508,128 L532,120 L546,118" fill="none" stroke="#7ec8ff" stroke-width="2" stroke-dasharray="4 3"></path>
+                <rect x="428" y="188" width="172" height="36" rx="4" fill="#191c17" stroke="#4b5049" stroke-width="1.5"></rect>
+                <text x="440" y="211" font-family="'IBM Plex Mono',monospace" font-size="10" fill="#9aa294">teleop / lifecycle / echo</text>
+                <text x="622" y="72" font-family="'IBM Plex Mono',monospace" font-size="11" fill="#9aa294">GRAFANA</text>
+                <rect x="620" y="80" width="152" height="154" rx="5" fill="#101317" stroke="#4b5049" stroke-width="1.5"></rect>
+                <path d="M632,150 L656,132 L678,158 L700,120 L722,142 L744,112 L760,128" fill="none" stroke="#f2c94c" stroke-width="2"></path>
+                <rect x="632" y="186" width="128" height="10" rx="3" fill="#4fd9bf"></rect>
+                <rect x="632" y="204" width="86" height="10" rx="3" fill="#4fd9bf" opacity=".6"></rect>
+                <text x="404" y="308" font-family="'IBM Plex Mono',monospace" font-size="11" fill="#9aa294">② 個別ロボ画面（左＝3D・操作／右＝メトリクス）</text>
+              </svg>
+            </div>
+            <div class="mockup-note">※ 実スクリーンショットではなく再現イラスト。RViz・<code>ros2 topic echo</code>・<code>ros2 lifecycle set</code>・Grafana をターミナルから引き剥がし、ブラウザ1枚に寄せるのが狙い。実ブラウザでの表示確認（N-VIZ-9b / N-VIZ-10b）は未実施。</div>
+          </div>
+        </div>
+
+        <div class="grid" style="margin-top:16px;">
+          <div class="panel">
+            <div class="panel-head"><span class="num">2</span><h3>ブラウザ1枚へ寄せる出口</h3></div>
+            <div class="panel-body">
+              <div class="flow">
+                <div class="box">ROS 2<br>トピック</div><div class="arw">→</div>
+                <div class="box">foxglove_bridge<br>WebSocket :8765</div><div class="arw">→</div>
+                <div class="box">Lichtblick<br>(WSL2 :8080)</div><div class="arw">＋</div>
+                <div class="box">Grafana<br>iframe</div>
+              </div>
+              <ul>
+                <li>ブリッジは <code>hardware_bringup.launch.py</code> が自動起動する（未導入でも launch 全体は落とさず警告のみ）</li>
+                <li><b>帯域を決めるのはブリッジではなくレイアウト</b>——購読したトピックだけが流れるので、点群やコストマップは「置いてあるが非表示」にしてある</li>
+                <li>Lichtblick 側に iframe パネルが無いため、Grafana は薄い合成シェル（<code>combined_view.html</code>）で左右に並べる</li>
+              </ul>
+              <div class="note">⚠ この WebSocket は<b>無認証で LAN へ開く</b>。信用できない回線では <code>allow_control:=false</code> か SSH ポートフォワードにする。なお前進ゲート GUARD はこの経路より下流にあるため、ブラウザ由来の指令にも等しく効く。</div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><span class="num">3</span><h3>フリート一覧（N-VIZ-9）</h3></div>
+            <div class="panel-body">
+              <ul>
+                <li>入口は <code>fleet_view.html</code>（<code>run_robot_ops.sh --fleet</code>）。左にロボのカード、右はフリート集計の Grafana ダッシュボードを流用する</li>
+                <li>台数は <code>fleet.json</code>（id / label / host）で持つ。IP は DHCP で変わるため「確認日つきで手更新」する運用</li>
+                <li>個別画面には<b>他ロボの表示枠を先に用意し、既定は非表示</b>（local_costmap / person_marker / person_trail）</li>
+                <li>操作系パネル（teleop・サービス呼び出し）は<b>常に自機のみ</b>——1画面から他機を誤操作する経路を作らない</li>
+              </ul>
+              <div class="note">2台目の <code>/map</code> 共有がそのまま安全に成立するかは<b>まだ実証していない</b>。実証が済んでから表示枠を on にする、という順序で切っている。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid" style="margin-top:16px;">
+          <div class="panel">
+            <div class="panel-head"><span class="num">4</span><h3>GUI で動かした配置を残す（N-VIZ-10）</h3></div>
+            <div class="panel-body">
+              <div class="twin">
+                <div class="col">
+                  <h4>生成物（コード）</h4>
+                  <ul>
+                    <li><code>layouts/robot_ops[_&lt;id&gt;].json</code></li>
+                    <li>起動のたびに作り直す</li>
+                    <li>トピック名は namespace から組む</li>
+                  </ul>
+                </div>
+                <div class="col">
+                  <h4>手動保存（GUI）</h4>
+                  <ul>
+                    <li><code>layouts/overrides/&lt;id&gt;.json</code></li>
+                    <li>ドラッグ調整を Export して置く</li>
+                    <li>生成スクリプトは書き込まない</li>
+                  </ul>
+                </div>
+              </div>
+              <ul>
+                <li>両者を<b>物理的に別ディレクトリ</b>へ置き、「編集されたか」を判定せずに済む形にした（mtime やハッシュでの判定は壊れやすい）</li>
+                <li>起動時は「override があればそちら、無ければ生成物」を返すだけ。フリートモードでは全ロボ分の判定結果を <code>manifest.json</code> に書き出し、判定ロジックの実体を Python 側1箇所に保つ</li>
+              </ul>
+              <div class="note">ロールバックは <code>run_robot_ops.sh --reset-layout [robot_id]</code>。override を消せば次回から生成物へ自動的に戻る。</div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><span class="num">5</span><h3>置き場所を分ける（ディレクトリ改名）</h3></div>
+            <div class="panel-body">
+              <div class="stackd">
+                <div class="row"><div class="lbl">自作<b>運用ツール</b></div>
+                  <div class="chips"><span class="chip active">local/robot_ops/</span><span class="chip">run_robot_ops.sh</span></div></div>
+                <div class="row dim-row"><div class="lbl">旧名<b>—</b></div>
+                  <div class="chips"><span class="chip dim">local/lichtblick/</span><span class="chip dim">run_lichtblick.sh</span></div></div>
+                <div class="row"><div class="lbl">OSS<b>compose</b></div>
+                  <div class="chips"><span class="chip">docker/lichtblick/</span><span class="chip">（改名せず据え置き）</span></div></div>
+              </div>
+              <ul>
+                <li>置き場所が Lichtblick 専用の設定から、フリート管理・Grafana 合成まで抱える器に育ったため、実体に合わせて改名した</li>
+                <li><b>第三者 OSS の定義と自作コードは混ぜない</b>——同居させると、将来の Lichtblick 更新と自作コードの差分がレビューで混ざる</li>
+              </ul>
+              <div class="note">改名は参照側（ドキュメント・起動スクリプト）まで一括で追随させ、純ロジックは pytest で固定してある。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="doclinks">
+          <span class="lbl">詳細ドキュメント:</span>
+          <a href="docs/observability.md">可観測性（Grafana / メトリクス）</a>
+          <a href="docs/engineering_decisions.md">設計判断ログ（Issue形式）</a>
+        </div>
+      </div>
+
+      <!-- SLIDE 9: 駆動系とまとめ（共通・OVERVIEW #2-3） -->
       <div class="slide">
         <div class="slide-title-wrap">
           <span class="track-chip overview"><span class="dot2"></span>共通基盤 — SHARED</span>
@@ -1114,6 +1282,7 @@ code{font-family:var(--font-mono);font-size:.92em;background:rgba(127,127,127,.1
               <li>知覚・追従・安全・駆動を疎結合な3層＋Lifecycle排他制御で構成</li>
               <li>ロストは1回のイベントではなく Tier1/Tier2 の段階的リカバリーで扱う</li>
               <li>安全は単一障害点を作らない3層ゲートで担保する</li>
+              <li>運用画面も1台用で作り込まず、一覧→個別・表示枠先出しでN台へ広げられる形にする</li>
             </ul>
           </div>
           <div class="quote">
@@ -1135,7 +1304,7 @@ code{font-family:var(--font-mono);font-size:.92em;background:rgba(127,127,127,.1
 
   <div class="controller">
     <div class="arrows"><button id="prevBtn" type="button" aria-label="前のスライド">← PREV</button></div>
-    <div class="info" id="infoText"><b>1/8 概要</b><br>Next: 2/8 地図作成機能</div>
+    <div class="info" id="infoText"><b>1/9 概要</b><br>Next: 2/9 地図作成機能</div>
     <div class="dots" id="dots"></div>
     <div class="arrows"><button id="nextBtn" type="button" aria-label="次のスライド">NEXT →</button></div>
   </div>
@@ -1152,6 +1321,7 @@ code{font-family:var(--font-mono);font-size:.92em;background:rgba(127,127,127,.1
     "人追従機能",
     "追従の状況",
     "追従の仕組み",
+    "運用画面とフリート",
     "駆動系とまとめ"
   ];
   var track = document.getElementById('track');

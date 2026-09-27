@@ -414,14 +414,15 @@ ROS2ノード (OTel SDK)
 | ステータス | 内容 |
 |---|---|
 | **実装済み・実機稼働** | OTel Collector → Prometheus → Grafana（Jetson 上で systemd 常駐）／3層ドリルダウンのダッシュボード／ログ・メトリクスの閉じた語彙と CI 検証／3層の安全ゲート（実機で発火・自動復帰まで確認） |
-| **実装済み・stub 環境で検証** | SLO / Error Budget（multi-window バーンレートの2段アラート）。現時点では S4（稼働率）・S5（パイプライン鮮度）の2指標のみで、実機メトリクスへの接続は未了／アラート別 Runbook（閾値・対処は dev 環境の合成データで確認したのみで、実インシデントでの検証は未了） |
+| **実装済み・stub 環境で検証** | SLO / Error Budget（multi-window バーンレートの2段アラート）。S1（追従成功率）・S2（ロスト復帰時間）・S4（稼働率）・S5（パイプライン鮮度）の4指標、実機メトリクスへの接続は未了／主要ROS2ノードの死活監視（9アラート）／アラート別 Runbook（閾値・対処は dev 環境の合成データで確認したのみで、実インシデントでの検証は未了） |
 | **設計段階（未実装）** | N台フリート管制（`kubectl scale`）／Azure AKS + GitOps ／ Terraform IaC ／ アラート→自動修復のループ |
 
 **フリート運用への拡張性（設計）**: OTel Collector の `service.instance_id` により、複数台の
 ロボットからのメトリクスを同一 Prometheus へ集約できる。2台目の追加時はダッシュボードの
 横展開で対応する設計。
 
-→ [docs/observability_detail.md](docs/observability_detail.md)
+→ [docs/observability_detail.md](docs/observability_detail.md)（1台の可観測基盤の詳細設計）／
+[docs/robot_sre_design.md](docs/robot_sre_design.md)（SLO定義・技術選定・IaC/AKS設計を含むフリート管制基盤の設計書）
 
 ---
 
@@ -557,6 +558,7 @@ Jetson 実機が無くても、x86 の Gazebo シミュレーション（`robotc
 | [docs/architecture_detail.md](docs/architecture_detail.md) | ROS2ノードグラフ、レイヤード設計詳細、センサーフュージョン |
 | [docs/development_guide.md](docs/development_guide.md) | ビルド手順、テスト手順 |
 | [docs/observability_detail.md](docs/observability_detail.md) | OTelスタック構成、ファイル配置 |
+| [docs/robot_sre_design.md](docs/robot_sre_design.md) | フリート管制基盤の設計書（SLI/SLO定義・技術選定・IaC/AKS設計、実装済み範囲と未実装範囲を明示） |
 | [docs/serial_deadlock_analysis.md](docs/serial_deadlock_analysis.md) | UART通信障害の調査記録 |
 | [docs/tof_blocking_analysis.md](docs/tof_blocking_analysis.md) | I2Cブロッキング障害の調査記録 |
 | [docs/lidar_intensity_ghost_analysis.md](docs/lidar_intensity_ghost_analysis.md) | LiDAR障害物ゴースト誤検出の調査記録（intensityフィルタ導入） |
