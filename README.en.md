@@ -91,7 +91,7 @@ not been captured on video yet.
 | Takes voice commands | 「ヘイロボ」*(Hey Robo)* → STT → LLM intent classification → mode switch | faster-whisper + Qwen2.5 1.5B |
 | Follows a specified object | YOLO detection → depth estimation → Nav2 goal generation (defaults to a person; switchable by voice to any COCO object, e.g. a bottle) | YOLOv8 + Depth Anything V2 + Nav2 |
 | Doesn't give up when it loses you | Predicts ahead from the tracked trail (Tier 1) → autonomous search (Tier 2) → re-acquire | Breadcrumb prediction + GVD / frontier exploration |
-| Avoids obstacles autonomously | LiDAR → costmap → path re-planning | SLAM Toolbox + Nav2 DWB |
+| Avoids obstacles autonomously | LiDAR → costmap → path re-planning | SLAM Toolbox + Nav2 (Regulated Pure Pursuit) |
 | Searches for an object | Natural-language query → zero-shot detection → autonomous exploration | YOLO-World |
 | Remembers rooms via tags, recovers its pose | AprilTag detection → room resolution → AMCL initial-pose injection with the matching map (no manual RViz step) | AprilTag + AMCL + Nav2 |
 | Describes what it sees | Camera frame → cloud VLM → natural-language answer | Gemini API |
@@ -510,7 +510,7 @@ flowchart TB
             APRILTAG["apriltag_ros (separate process)"]
             AMCL["AMCL"]
             EKF["EKF (wheel_odom + IMU)"]
-            NAV2["Nav2 (SmacPlanner2D + DWB)"]
+            NAV2["Nav2 (SmacPlanner2D + Regulated Pure Pursuit)"]
         end
         subgraph CTRL["Control / Brain"]
             MODE["ai_mode_manager (Lifecycle mutual exclusion)"]

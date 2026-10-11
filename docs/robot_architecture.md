@@ -152,7 +152,7 @@ v4l2_camera は生き続けるため DDS ゴーストパブリッシャー問題
                                 動的 set_parameters）
 
 /odometry/filtered + /scan_target_filtered + /map(_hardened)
-  → Nav2 (SmacPlanner2D + DWBLocalPlanner) → /cmd_vel
+  → Nav2 (SmacPlanner2D + RegulatedPurePursuitController) → /cmd_vel
 ```
 
 | mode | 起動内容 |

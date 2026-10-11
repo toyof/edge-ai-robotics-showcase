@@ -97,6 +97,7 @@ KICK 39件があり、**N23-5 のスリップ棄却も3件発火していた**�
 | `robot_state_publisher` | URDF → TF（`frame_prefix` で namespace 対応） | `robot_state_publisher` | — | PUB `/tf`, `/tf_static` |
 | `work_event_node` | 可観測性: 作業イベント→OTel | `toyof_robot_observability` | `[work_event]` `[mission]` | SUB `status/activity`, `observability/log_event` |
 | `metrics_node` | 可観測性: tegrastats/vmstat/トピックレート→OTel | `toyof_robot_observability` | `[latency]` `OTel` | SUB `object_tracking/info` ほか |
+| `ash_sampler_node` | 可観測性: ASH（activity × 待ち事象を1Hzで記録、稼働時間の内訳集計用） | `toyof_robot_observability` | `[ASH]` | SUB `status/lifecycle`, `status/activity`, `cmd_vel_guard/blocked_kind`, `pico/deadband_state`, `wheel_odom{,/slip,/stuck}`, `cmd_vel` → `runs/<run_id>/ash.jsonl`（集計は `scripts/ash_report.py`） |
 | `pico_stub_node` | （sim のみ）Pico の代替。GUARD は実機と同一ロジック | `toyof_robot_vehicle` | `[GUARD]` `[PicoStub]` | 実機の `pico_bridge_node` と同じ |
 | `imu_sim_node` | （sim のみ）IMU 代替 | `toyof_robot_vehicle` | `[imu_sim]` | PUB `imu/data_raw` |
 | `laser_odom_node`（N24-68、既定 true で起動する） | 並進限定レーザーオドメトリ。EKF未接続・観測専用 | `toyof_robot_vehicle` | `[laser_odom]` | SUB `scan_target_filtered`, `imu/data_aligned`, `wheel_odom` / PUB `laser_odom`, `laser_odom/debug` |

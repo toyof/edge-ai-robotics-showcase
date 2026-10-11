@@ -81,6 +81,8 @@ src/
 │   │   └── tensor_to_depth_image_node.cpp # テンソル→深度画像+点群 (ComposableNode)
 │   └── toyof_robot_ai_vision/
 │       ├── bbox_visualizer_node.py        # 検出可視化（デバッグ用）
+│       ├── ops_camera_mux_node.py         # 運用画面カメラの出口 ops/camera/compressed（mode で中身切替、N-VIZ-24b）
+│       ├── ops_camera_mux_logic.py        # 上記の切替判断（純ロジック）
 │       ├── yolo_cpu_detector_node.py      # CPU YOLO（カメラあり確認用）
 │       └── detection_stub_node.py         # 検出スタブ（ハードウェアなし確認用）
 │
@@ -139,7 +141,10 @@ src/
 ├── toyof_robot_observability/  # 可観測性（ament_python）
 │   └── toyof_robot_observability/
 │       ├── work_event_node.py       # 軸1: 仕事量・トリガーイベント収集（OTel Counter）
-│       └── metrics_node.py          # 軸2: OS / ROS 2 負荷メトリクス収集（vmstat・tegrastats）
+│       ├── metrics_node.py          # 軸2: OS / ROS 2 負荷メトリクス収集（vmstat・tegrastats）
+│       ├── critical_alert_node.py   # RobotLog.error()のLINE即時通知（N-OBS-7）
+│       ├── process_monitor_node.py  # モード別プロセス/ノードの残存・欠落監視（T-AT-6-31）
+│       └── ash_sampler_node.py      # ASH: 1Hzで activity × 待ち事象を runs/<run_id>/ash.jsonl へ記録（ASH-1）
 │
 ├── toyof_robot_subagent_vision/  # F-3-1: 固定PCカメラの死角補完（ament_python、Isaac ROS非依存）
 │   └── toyof_robot_subagent_vision/

@@ -79,7 +79,7 @@
 | 音声で指示を受ける | 「ヘイロボ」→ STT → LLM判定 → モード切替 | faster-whisper + Qwen2.5 1.5B |
 | 指定物体を追いかける | YOLO検出 → 深度推定 → Nav2ゴール生成（人がデフォルト、音声でペットボトルなど任意のCOCO物体に変更可） | YOLOv8 + Depth Anything V2 + Nav2 |
 | 見失っても諦めない | 軌跡から先回り（Tier1）→ 自律探索（Tier2）→ 再捕捉 | breadcrumb 予測 + GVD / フロンティア探索 |
-| 障害物を自律回避する | LiDAR → コストマップ → 経路再計画 | SLAM Toolbox + Nav2 DWB |
+| 障害物を自律回避する | LiDAR → コストマップ → 経路再計画 | SLAM Toolbox + Nav2 (Regulated Pure Pursuit) |
 | 物体を探す | 自然言語指定 → ゼロショット検出 → 自律探索 | YOLO-World |
 | タグでルームを記憶し自己位置を復元する | AprilTag検出 → room解決 → 対応マップでAMCL初期位置投入（RViz手動操作不要） | AprilTag + AMCL + Nav2 |
 | 見えるものを説明する | カメラ画像 → Cloud VLM → 自然言語応答 | Gemini API |
@@ -452,7 +452,7 @@ flowchart TB
             APRILTAG["apriltag_ros (別プロセス)"]
             AMCL["AMCL"]
             EKF["EKF (wheel_odom + IMU)"]
-            NAV2["Nav2 (SmacPlanner2D + DWB)"]
+            NAV2["Nav2 (SmacPlanner2D + Regulated Pure Pursuit)"]
         end
         subgraph CTRL["Control / Brain"]
             MODE["ai_mode_manager (Lifecycle 排他制御)"]
@@ -569,7 +569,7 @@ Jetson 実機が無くても、x86 の Gazebo シミュレーション（`robotc
 | [docs/troubleshooting_flow.md](docs/troubleshooting_flow.md) | 障害切り分けフロー（Robot SRE） |
 | [docs/observability_runbook.md](docs/observability_runbook.md) | アラート別 Runbook（SLO バーンレート / 安全停止頻発 等の初動） |
 | [docs/logging_map.md](docs/logging_map.md) | どのノードがどのログへ何を出すかの一覧（調査の入口） |
-| [docs/robotics_as_mcp_design.md](docs/robotics_as_mcp_design.md) | マルチロボット連携の設計書（Robotics as MCP、未実装） |
+| [docs/robotics_as_mcp_design.md](docs/robotics_as_mcp_design.md) | マルチロボット連携の設計書（Robotics as MCP。Phase 1 は [local/fleet_mcp/](local/fleet_mcp/) で実装済み） |
 
 ---
 

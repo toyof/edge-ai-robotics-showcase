@@ -184,7 +184,7 @@ Grafana UI 上の手作業が必須**なため、このセッション（docker/
 │  推論レイテンシ: rate(inference_latency_ms_sum[5m])       │
 │               / rate(inference_latency_ms_count[5m])      │ model別、robot_detail.json
 │               （id:38 のBarチャートと同一クエリ・相互参照）│  パネルへリンク
-│  カメラ hz   : ros_topic_hz{topic="/image_raw/compressed"} │ 閾値 赤<1
+│  カメラ hz   : ros_topic_hz{topic="image_raw/compressed"} │ 閾値 赤<1
 │  プロセス別メモリ: sum by (executable_name) (process_memory_usage) │ robot_detail.json id:39 と同一
 └──────────────────┬───────────────────────────┘
                     │

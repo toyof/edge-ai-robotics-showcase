@@ -92,11 +92,11 @@ Jetson Orin Nano 8GB の制約下で、重い AI ノード（LLM / YOLO / YOLO-W
    （systemd 化後: `systemctl status/restart otel-collector`）。
 3. 2 個以上なら重複プロセスを `pgrep -fa otelcol` 等で特定し、片方を kill する。
 
-### P2b: ROS パイプライン停滞（`RosCameraStale` / `ros_topic_hz{topic="/image_raw/compressed"} < 1` が 2 分継続）
+### P2b: ROS パイプライン停滞（`RosCameraStale` / `ros_topic_hz{topic="image_raw/compressed"} < 1` が 2 分継続）
 
 カメラはどの AI モードでも常時 publish される想定のため、hz 低下は perception 層の停止を示す。
 
-1. `ros_topic_hz{topic="/image_raw/compressed"}` の推移を確認する。
+1. `ros_topic_hz{topic="image_raw/compressed"}` の推移を確認する。
 2. `work_event_node` / `metrics_node` / カメラノードの ROS2 生存を確認する。
    落ちていれば `bringup_observability.sh` / `bringup_hard.sh` で再起動。
 3. どちらも生きていれば、Jetson → PC:9090 の疎通・`remote_write` の送信ログ
