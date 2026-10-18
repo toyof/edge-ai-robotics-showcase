@@ -21,6 +21,7 @@
 | `toyof_robot_ai_speech` | ament_python | 音声AI（STT/TTS） — `speech_io_node` |
 | `toyof_robot_observability` | ament_python | 可観測性（OTel Counter/Gauge） — `work_event_node` / `metrics_node` |
 | `toyof_robot_subagent_vision` | ament_python | F-3-1: 固定PCカメラでロボットの死角を補うマルチエージェント物体発見ノード（Isaac ROS非依存、x86/WSL2で動作）。F-4: オンデマンド検索要求への参加可否判定（`on_demand_policy_logic.py`、設計確定・ノード結線は未着手） |
+| `toyof_robot_cloud` | ament_python | AZ-1: Azure 運用画面との橋渡し — `cloud_bridge_node`（ロボからは発信のみ。命令は Storage Queue を取りに行き、ES256署名・期限30秒・許可リストを検証してから `mode/request` 等へ流す） |
 
 ---
 
@@ -151,6 +152,13 @@ src/
 │       ├── subagent_vision_node.py    # YOLO-World(CPU) → AprilTag較正の床面ホモグラフィでmap(x,y)投影 → /fleet/object_found
 │       ├── subagent_vision_logic.py   # 較正・投影ロジック（ROS2非依存）
 │       └── on_demand_policy_logic.py  # F-4: 検索要求への参加可否・モデル寿命判定ロジック（ROS2非依存、ノード結線は未着手）
+│
+├── toyof_robot_cloud/          # AZ-1: Azure 運用画面との橋渡し（ament_python、hardware_bringup が自動起動）
+│   └── toyof_robot_cloud/
+│       ├── cloud_bridge_node.py   # キュー取得・署名検証・状態/映像/地図の送信
+│       ├── command_logic.py       # 命令の検証・許可リスト（ROS2非依存）
+│       ├── motion_logic.py        # 操作キー（move/turn）の1回完結動作（ROS2非依存）
+│       └── uplink_logic.py        # 送信データの整形（ROS2非依存）
 │
 ├── image_pipeline/             # ROS2 image_pipeline（外部）
 └── isaac_ros_compression/      # Isaac ROS画像圧縮（外部）

@@ -168,7 +168,7 @@ GATE_THROUGH（2レグ駆動）・エリアcommit/退役・スタック脱出な
 `mapping_lifecycle_node` は自己位置ジャンプ検知（`MapOdomJumpMonitor`、N24-83、
 §8参照）・探索正常完了時の既存マップNav2(AMCL)へのtag正対ハンドオフ
 （N24-79、`tag_facing_enabled`既定 **true**、N24-79d）も担う。地図確率判定の占有閾値は `mapper_params_online_async.yaml` の
-`occupancy_threshold: 0.25`（N24-80、既定0.1から変更）。
+`occupancy_threshold: 0.25`（N24-80、既定0.1から変更。N24-99f で 0.4 へ緩めたが壁が薄くなり戻した）。取り込みは `minimum_travel_distance`／`_heading` 0.15（N24-99f、既定0.5）。
 内部ロジックの詳細（パラメータ・状態遷移・ロールバック手段）→ `docs/mode_details.md`、
 CLAUDE.md §6.4/§6.5/§6.7。
 

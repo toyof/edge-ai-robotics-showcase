@@ -103,7 +103,7 @@
 
 | Metric | Value | 備考 |
 |---|---|---|
-| カスタムROS2パッケージ数 | 11 | `src/toyof_robot_*` |
+| カスタムROS2パッケージ数 | 12 | `src/toyof_robot_*` |
 | ROS2 非依存の純ロジックモジュール | 45 | `*_logic.py`。実機・コンテナなしで `pytest` 可能（→ [Show Me the Code](#show-me-the-code)） |
 | 自動テスト | 約1,940 件 / 73 ファイル | 上記の純ロジック中心。lint 自動テスト（flake8 / pep257 / copyright、27ファイル）は除く |
 | CI | GitHub Actions | 上記 pytest ＋ flake8 / pep257（docstring 規約）を push ごとに実行 |
@@ -120,7 +120,7 @@
 
 ### 設計として解いた問題
 
-この3本がプロジェクトの中核です。いずれも「動くものを足す」より
+以下の4本がプロジェクトの中核です。いずれも「動くものを足す」より
 **「壊れ方を先に決める」「作らない判断をする」** ほうに時間を使っています。
 
 #### 見失った人をどう取り戻すか — 2段リカバリ設計
@@ -209,6 +209,30 @@ publisher 側の変更はゼロで、1トピックを購読するだけで全経
 </p>
 
 → z分布ヒストグラム・較正の全過程 → [docs/engineering_decisions.md](docs/engineering_decisions.md) (Issue-10)
+
+#### 曲がり角で壁に当たらない — 先読み距離を車体と摩擦から導出する
+
+曲がり角で車体が壁を擦る問題は、パラメータを手で調整して減った（先読み 0.2→0.5m、
+計画用の車体幅を安全ゲートの幅に合わせる）。ただし「なぜ効いたか」が分からないままでは、
+車体を作り替えたり床が変わったりするたびに調整をやり直すことになる。そこで理由を式にした。
+
+本質は **長方形の車体はその場で回ると、角が半幅（0.15m）より外の円（0.223m）を掃く** こと。
+直進なら通れる壁際でも、そこで回頭すると角が当たる。よって接触対策の本筋は「回頭させない」ことになる。
+経路追従（Pure Pursuit）の先読み距離 $L$ には、守るべき **窓** がある。
+
+| 制約 | 式 | 意味 |
+|---|---|---|
+| 下限 | $\arctan(\delta/L) \le \theta_{rot}/3$ | 地図の格子（解像度 $\delta$）で階段状になった経路に反応して、ノイズだけで回頭しない |
+| 上限① | $L\tan(\theta/4) \le d_{in} - w_p$ | 角の手前から曲がり始めて内側を削りすぎない |
+| 上限② | $\sqrt{R^2 + L^2(1/k-1)} - R \le \Delta_{max}$ | 摩擦で旋回の効き $k$ がずれても、カーブで壁まで膨らまない（ずれは $L^2$ に比例） |
+
+旧設定（$L$=0.2m）は下限を割っていた——格子のノイズ（0.245rad）だけで回頭しきい値（0.30rad）の
+8割に届き、「進む→止まる→曲がる」が起きていた、と式で説明できる。上限②の式は、追従を数値
+シミュレーションした結果と 0.1% 以内で一致する。現行の設定が窓の中にあることはテストで固定してあり、
+車体寸法や地図解像度を変えて窓から外れると CI が落ちる。実機では、その場回頭の時間比率が
+32.4%→18.1% に下がった（短時間の暫定値）。旋回の効き $k$ と減速度はまだ測っていない。
+
+→ 導出・数値・限界 → [docs/corner_geometry.md](docs/corner_geometry.md)
 
 ---
 
@@ -566,6 +590,7 @@ Jetson 実機が無くても、x86 の Gazebo シミュレーション（`robotc
 | [docs/robot_architecture.md](docs/robot_architecture.md) | ロボットアーキテクチャ詳細 |
 | [docs/mode_details.md](docs/mode_details.md) | 各AIモードの内部ロジック・起動シーケンス・パラメータ |
 | [docs/safety_architecture.md](docs/safety_architecture.md) | 安全設計（多層フェイルセーフ・cmd_velガード） |
+| [docs/corner_geometry.md](docs/corner_geometry.md) | 曲がり角で当たらない先読み距離・計画幅の導出（車体寸法・摩擦を入力にした式） |
 | [docs/troubleshooting_flow.md](docs/troubleshooting_flow.md) | 障害切り分けフロー（Robot SRE） |
 | [docs/observability_runbook.md](docs/observability_runbook.md) | アラート別 Runbook（SLO バーンレート / 安全停止頻発 等の初動） |
 | [docs/logging_map.md](docs/logging_map.md) | どのノードがどのログへ何を出すかの一覧（調査の入口） |
