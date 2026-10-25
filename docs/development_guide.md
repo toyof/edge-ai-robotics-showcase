@@ -104,7 +104,9 @@ src/
 │       ├── clearance_logic.py                 # robot_safety_clearance_m からの離隔導出（N23-1）
 │       ├── nudge_safety_logic.py               # GATE_THROUGH/ノッジの前方安全確認（N24-54c）
 │       ├── slam_jump_detect_logic.py           # map/odomフレーム変位比較による自己位置ジャンプ検知（N24-83）
-│       └── tag_facing_logic.py                 # mapping正常完了後の最寄りtag正対姿勢計算（N24-79）
+│       ├── tag_facing_logic.py                 # mapping正常完了後の最寄りtag正対姿勢計算（N24-79）・GUARD中断判定（N24-103）
+│       ├── room_map_save_logic.py              # room地図の保存・品質ゲート（N24-19）
+│       └── exit_save_logic.py                  # 終了シグナル受信時の保存待ち（N24-100c）
 │
 ├── toyof_robot_localization/   # AprilTag 自己位置推定（ament_python）
 │   └── toyof_robot_localization/

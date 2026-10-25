@@ -559,6 +559,18 @@ stallでも安全性は変わらないという判断）。**N24-79d（2026-09-1
 自己位置ジャンプ検知（N24-83、`docs/safety_architecture.md` §3.5）で停止した場合は
 壊れた姿勢でAMCLナビを始めないよう、このハンドオフの対象から自動的に外れる。
 
+**tag正対待ちのGUARD中断（N24-103、実機未検証）**: 正対ゴールの Nav2 待ち中に GUARD の前進ブロックが
+`guard_block_min_sec` 続いたら、タイムアウトを待たずに待ちを畳む（`tag_facing_logic.facing_abort_reason()`）。
+ロールバックは `tag_facing_guard_abort:=false`。
+
+**地図の品質ゲート（N24-19、実機未検証）**: 保存した pgm の free セル数（画素値 250 以上）が既存 room の
+`room_map_min_free_ratio`（既定 0.5）倍未満なら、探索が実質失敗したとみなして既存 room とタグ座標を
+上書きせず `map/unmapped/<日時>/` へ退避する（`room_map_save_logic.count_free_cells_pgm()`）。既存が無い・
+読めない場合は素通し。`0.0` で無効。
+
+**終了シグナルでも地図を保存（N24-100c、実機未検証）**: mapping_node が SIGINT/SIGTERM を直接受けても
+探索スレッドの終了を最大100秒待ち、保存してから終了する（`exit_save_logic.py`）。
+
 ---
 
 ## AprilTag 自己位置推定
