@@ -116,8 +116,8 @@ not been captured on video yet.
 | Metric | Value | Notes |
 |---|---|---|
 | Custom ROS2 packages | 12 | `src/toyof_robot_*` |
-| ROS2-free pure-logic modules | 45 | `*_logic.py`, runnable under `pytest` with no robot and no container (→ [Show Me the Code](#show-me-the-code)) |
-| Automated tests | ~1,940 across 73 files | Mostly against the pure-logic modules above; excludes lint tests (flake8 / pep257 / copyright, 27 files) |
+| ROS2-free pure-logic modules | 155 | `*_logic.py`, runnable under `pytest` with no robot and no container (→ [Show Me the Code](#show-me-the-code)) |
+| Automated tests | ~2,660 across 141 files | Mostly against the pure-logic modules above; excludes lint tests (flake8 / pep257 / copyright, 30 files) |
 | CI | GitHub Actions | Runs the pytest suite above plus flake8 / pep257 (docstring rules) on every push |
 
 > Measurement environment: Jetson Orin Nano 8GB, JetPack 6, Isaac ROS Dev Container
@@ -261,6 +261,24 @@ exclusive memory management using ROS2 Lifecycle + OS drop_caches.
 </p>
 
 → Lifecycle transition sequence diagram in detail → [docs/engineering_decisions.md](docs/engineering_decisions.md) (Issue-06)
+
+#### Exclusivity wasn't enough: measuring and trimming memory inside 8 GB (Sep–Oct 2026)
+
+With the full stack loaded (camera, SLAM/Nav2, voice), the next mode still didn't have enough
+headroom at startup even under exclusive scheduling — and on Jetson, GPU OOM shows up not as a
+failed launch but as a crash on the first inference after launch. Instead of raising the memory
+gate's threshold, I **measured where memory was actually being held and removed it, one item at a time**.
+
+| Root cause found | Fix | Measured effect |
+|---|---|---|
+| LLM shutdown was treated as done after a fixed 1 s sleep; the next model grabbed CUDA before the GPU was released | Poll for actual process exit before moving on (SIGKILL on timeout) | CUDA OOM on LLM→YOLO switch gone; CmaFree 412 KB → 83–142 MB |
+| STT (faster-whisper) imported torch, unused for inference, and kept it resident | Block the optional torch import (model stays `small`) | 1492 → 669 MB, load 37.5 → 2.3 s, identical transcripts |
+| YOLO-World kept the CLIP text encoder after setting classes and moved it to GPU on first inference | Drop CLIP right after setting classes | GPU alloc 757 → 176 MB, NvMap errors 4 → 0, first inference 6.7 → 0.41 s |
+| The bundled llama.cpp binary lacked Orin's sm_87, so CUDA JIT ran every launch | Rebuild for sm_87 + persist the JIT cache | LLM startup 87.5 → 32.5–47.0 s |
+
+As a result, switching yolo → yoloworld now succeeds with the voice node still resident (previously the voice node had to be stopped first).
+
+→ Hypotheses, verification and rejected options → [docs/engineering_decisions.md](docs/engineering_decisions.md) (Issue-11)
 
 #### Diagnosing and fixing a serial deadlock
 

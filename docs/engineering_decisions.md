@@ -731,6 +731,73 @@ IMU側も加速度スパイクを示したため発火せず、laser 基準の�
 
 ---
 
+# Issue-11: 排他制御だけでは足りなかった — 8GB の中で「実測して削る」メモリチューニング
+
+Issue-06 の排他制御（1度に1モード）は前提であって、ゴールではなかった。カメラ・SLAM/Nav2・
+音声を載せた本来の構成では、排他にしていても次のモードを起動する時点で空きが足りず、
+しかも Jetson の GPU OOM は「起動に失敗する」ではなく「起動後の初回推論で落ちる」形で現れる。
+2026-09〜10 の実機セッションで、**どこにメモリが残っているのかを1つずつ実測で突き止めて削った**記録。
+
+## 事象
+
+* `activate:llm` → `stop` → `activate:yolo` で depth_encoder が CUDA OOM（`GXF_OUT_OF_MEMORY` /
+  `NvMapMemAllocInternalTagged error 12`）。CmaFree が 512MB 中 412KB まで枯渇していた。
+* yoloworld が起動前のメモリ予算ゲートを 2.6〜2.9GB で通過しても、worker の初回推論で NVML assert
+  （Jetson での GPU OOM の現れ方）。1回目は検出途切れから知覚途絶の安全停止まで落ちた。
+* 本来の構成（カメラ＋SLAM/Nav2＋音声）では yoloworld 起動前の空きが 2.4〜2.5GB しかなく、
+  予算ゲートの下限 2500MB を割る。
+* LLM の起動が 87.5 秒（ヘルスチェック上限 90 秒まで残り 2.5 秒）。OOM で llama-server が 15 秒で
+  死んでも、残り 75 秒待ち続けていた。
+
+## 影響
+
+* 撮影シナリオ（音声で指示 → 追従 → ロスト → 再捕捉）の途中でモード切替が失敗する。
+* 「ゲートを通ったのに落ちる」ため、ゲートの閾値を上げるしか手が無いように見える
+  （上げると使える予算がさらに減る）。
+
+## 仮説と検証
+
+| # | 疑った箇所 | 検証 | 結果 |
+|---|---|---|---|
+| A | LLM 停止が終わる前に次のモデルが CUDA を確保している | `_stop_llama_server()` を読む／停止直後の `ps` | **的中**: `pkill` 後に固定1秒待つだけで「終了完了」と出し、GPU 層をオフロードした llama-server の実終了を見ていなかった |
+| B | 音声ノード（STT small, CPU）が大きすぎる | `speech_io_node` の RSS と `/proc/<pid>/maps` | **的中**: ctranslate2 が任意 import する torch（推論では未使用）が常駐し約 0.9GB |
+| C | yoloworld worker が推論に要らない重みを GPU へ載せている | ultralytics を単体プローブして GPU 確保量を比較 | **的中**: `set_classes()` で使った CLIP ViT-B/32 を `clip_model` として抱えたまま、初回 `predict()` の `.to(cuda)` で一緒に GPU へ移していた（+約580MB） |
+| D | ゲートの閾値が低すぎる | — | **却下**: 症状を隠すだけで、使える予算が減る |
+| E | 初回推論前にウォームアップすればよい | — | **却下**: ピーク使用量は同じ |
+
+## 対策
+
+| ID | 対策 | 実測効果 |
+|---|---|---|
+| T-26-1d | llama-server・知覚コンテナの停止を「実終了をポーリング確認 → タイムアウトで SIGKILL」へ（`process_utils.wait_until_true()` / `kill_pid_graceful()`） | 同じ再現手順で OOM なし、CmaFree 412KB → 83〜142MB で安定 |
+| T-61 | `stt.block_torch`（既定 true）で torch の任意 import を止める。STT モデルは small のまま | STT 1492 → 669MB、ロード 37.5 → 2.3 秒、認識結果同一 |
+| T-63 | `set_classes([target])` 直後に `release_text_encoder()` で CLIP を手放す | GPU 確保 757 → 176MB、NvMap error 4 → 0、初回深度推定 6.7 → 0.41 秒、稼働中の available 最小 954 → 1733MB |
+| T-60a | 停止直後で予算ゲートが BLOCK なら `memory_gate_settle_sec`（30 秒）まで測り直して待つ | 解放途中の一時的な不足で弾かない |
+| T-58a-c | llama.cpp を Orin の sm_87 向けに再ビルド＋JIT キャッシュを永続化、`-ub 128` で compute buffer を縮小 | LLM 起動 87.5 → 32.5〜47.0 秒（warmup 50 → 0.5 秒） |
+| T-58d/f | llama-server を `poll()` して早期終了を即検知。タイムアウト時もプロセスを止める | 壊れた gguf を 10 秒で検知、GPU を握ったままのゾンビ／残存プロセスが消えた |
+
+起動前のメモリ予算ゲート（T-26-1a、`/proc/meminfo` の available が 2500MB 未満で BLOCK）は残し、
+**ゲートを厳しくするのではなく、ゲートの外側で使っていたメモリを減らす**方向で解決した。
+
+## 結果
+
+* 音声ノードを常駐させたまま yolo → stop → yoloworld が 2 回とも通過（available 2907MB / 2616MB）。
+  以前は音声ノードを一時停止しないと通らなかった。
+* yoloworld 起動直後の GPU OOM（NvMap error 12）が 4 回 → 0 回。
+* LLM ↔ YOLO の切替で CUDA OOM が再発していない。
+
+## 学び
+
+* **「プロセスを kill した」と「メモリが返った」は別の事象。** 固定スリープではなく、実際の終了を
+  観測してから次へ進む（サーバ運用の graceful shutdown と同じ）。
+* **大きいのはモデル本体ではなく、ライブラリが黙って抱えている付属物だった。** torch の任意 import、
+  使い終わったテキストエンコーダ。どちらもコード上は1行で、計測しないと見えない。
+* 予算ゲートを厳しくするのは最後の手段。まず「なぜ予算が足りないのか」を内訳まで分解する。
+
+詳細ログ: `todo/logs/ai_core.md`（T-26-1d / T-58 / T-60 / T-61 / T-63 節）。
+
+---
+
 # 参考: 障害分析ドキュメント一覧
 
 | ドキュメント | 内容 |

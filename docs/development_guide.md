@@ -48,10 +48,8 @@ src/
 │   │   ├── ai_core_managers.launch.py      # 第3層: AI頭脳（音声・LLM・YOLO管理）
 │   │   ├── yolo_object_follow.launch.py    # YOLO人追従パイプライン（LoadComposableNodes）
 │   │   ├── robot_bringup.launch.py         # 後方互換（hardware+autonomy相当）
-│   │   ├── bringup-localmode.launch.py
 │   │   ├── observability.launch.py         # 可観測性ノード（work_event/metrics）単体起動（復旧用）
 │   │   ├── sim_hardware_bringup.launch.py  # hardware_bringup の Gazebo Classic 版（x86 sim）
-│   │   ├── devenv.launch.py                # スタブ構成（pico_stub + detection_stub）
 │   │   └── state_transition_test.launch.py # Lifecycle 排他制御テスト（ダミーノード）
 │   ├── config/
 │   │   ├── ai_core_params.yaml              # AI頭脳層全ノードパラメータ（STT/TTS/LLM/YOLO/Mapping等）
@@ -65,8 +63,8 @@ src/
 │       ├── wheel_odom_node.py        # エンコーダ→ホイールオドメトリ（vxのみ、N21-3）
 │       ├── wheel_odom_logic.py       # オドメトリ・スリップ/拘束検知ロジック（ROS2非依存・pytest対象）
 │       ├── laser_odom_node.py        # 並進限定レーザーオドメトリ（N24-68、既定 true で起動）
+│       ├── robot_state_aggregator_node.py # 体の状態一式を obs/robot_state へ 10Hz（RF-3、既定 false）
 │       ├── turret_tracker_node.py    # PIDカメラ砲塔制御
-│       ├── motor_driver_node.py      # モーター直接制御（旧実装）
 │       ├── pico_stub_node.py         # Picoスタブ（ハードウェアなし確認用）
 │       ├── imu_sim_node.py           # （simのみ）IMU代替
 │       ├── imu_yaw_aligner_node.py   # IMUヨー補正
@@ -119,10 +117,17 @@ src/
 ├── toyof_robot_ai_control/     # 統合制御・LLM・AI モード管理（ament_python）
 │   └── toyof_robot_ai_control/
 │       ├── object_tracking_info_node.py       # YOLO検出→追従対象選択・制御誤差算出
-│       ├── follow_goal_generator_node.py      # Nav2ゴール生成・追従
-│       ├── follow_recovery_logic.py           # ロストリカバリ（Tier1先回り/Tier2探索）ロジック（ROS2非依存）
+│       ├── follow_goal_generator_node.py      # Nav2ゴール生成・追従（下の follow_* 部品を組み立てる、RF-7）
+│       ├── follow_tier2_search.py             # 　部品: Tier2 探索（エンジン選択・送信・GATE_THROUGH・突入ノッジ）
+│       ├── follow_capture.py                  # 　部品: search_object の capture 終端（接近→再測定→座標記憶）
+│       ├── follow_guard_escape.py             # 　部品: GUARD 持続ブロック・車輪空転キック・ESCAPE・停止からの復帰
+│       ├── follow_amcl_gate.py / follow_ekf_gate.py  # 　部品: 自己位置（AMCL）/ EKF 発散の安全停止と復帰
+│       ├── follow_direct_drive.py             # 　部品: cmd_vel 直接駆動フェーズの持ち主（ROS2非依存、RF-6a）
+│       ├── follow_visualizer.py               # 　部品: RViz 表示（表示専用）
+│       ├── follow_common.py                   # 　部品が共有する Goal2D 等（ROS2非依存）
+│       ├── recovery_policy.py                 # ロスト中の判断の差し替え口（RF-8、ROS2非依存）
+│       ├── follow_recovery_logic.py           # ロストリカバリ（Tier1先回り/Tier2探索）ロジック・PersonTrail（ROS2非依存）
 │       ├── fleet_search_logic.py              # F-4: オンデマンド・フリート検索要求の集計ロジック（ROS2非依存、ノード結線は未着手）
-│       ├── follow_path_generator_node.py      # Nav2 FollowPath制御
 │       ├── person_follower.py                 # シンプル追従（旧実装）
 │       ├── llm_agent_node.py                  # LLMエージェント（脳）
 │       ├── robot_agent.py                     # ROS2コマンドディスパッチ・Gemini VLM
@@ -158,7 +163,8 @@ src/
 ├── toyof_robot_cloud/          # AZ-1: Azure 運用画面との橋渡し（ament_python、hardware_bringup が自動起動）
 │   └── toyof_robot_cloud/
 │       ├── cloud_bridge_node.py   # キュー取得・署名検証・状態/映像/地図の送信
-│       ├── command_logic.py       # 命令の検証・許可リスト（ROS2非依存）
+│       ├── command_spec.py        # 許可リストの正本（標準ライブラリのみ。ops-web の app/ へ複製、RF-5c）
+│       ├── command_logic.py       # 命令の検証（署名・期限・重複。許可リストは command_spec）
 │       ├── motion_logic.py        # 操作キー（move/turn）の1回完結動作（ROS2非依存）
 │       └── uplink_logic.py        # 送信データの整形（ROS2非依存）
 │
@@ -335,21 +341,10 @@ watch -n 1 'cat /tmp/robot_context.json | python3 -m json.tool'
 
 ### 5. 視覚追従パイプライン（x86 スタブ）
 
-実機なしで Nav2 ゴール生成・追従ロジックを確認する（`robotcar-sim` コンテナ内）。
-
-```bash
-# robotcar-sim コンテナ内
-colcon build --packages-select toyof_robot_interfaces toyof_robot_vehicle \
-  toyof_robot_ai_vision toyof_robot_ai_control toyof_robot_bringup --symlink-install
-source install/setup.bash
-
-ros2 launch toyof_robot_bringup devenv.launch.py
-
-# 別ターミナルで確認
-ros2 topic echo /cmd_vel             # 追従コマンド速度
-ros2 topic echo /detections_output   # スタブ検出データ
-ros2 topic echo /object_tracking/info
-```
+実機なしで追従ゴール生成・ロストリカバリを確認するには、Gazebo sim の統合テストを使う
+（`docker/sim/run_recovery_test.sh`、手順 → `docker/sim/README.md`）。
+旧 `devenv.launch.py`（`person_follower` の P 制御デモ）は現行の `follow_goal_generator_node` を
+通らないため RF-11b で撤去した。ノード単体の振る舞いは `scripts/follow_smoke/smoke_follow_node.py` で見る。
 
 ---
 

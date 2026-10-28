@@ -104,8 +104,8 @@
 | Metric | Value | 備考 |
 |---|---|---|
 | カスタムROS2パッケージ数 | 12 | `src/toyof_robot_*` |
-| ROS2 非依存の純ロジックモジュール | 45 | `*_logic.py`。実機・コンテナなしで `pytest` 可能（→ [Show Me the Code](#show-me-the-code)） |
-| 自動テスト | 約1,940 件 / 73 ファイル | 上記の純ロジック中心。lint 自動テスト（flake8 / pep257 / copyright、27ファイル）は除く |
+| ROS2 非依存の純ロジックモジュール | 155 | `*_logic.py`。実機・コンテナなしで `pytest` 可能（→ [Show Me the Code](#show-me-the-code)） |
+| 自動テスト | 約2,660 件 / 141 ファイル | 上記の純ロジック中心。lint 自動テスト（flake8 / pep257 / copyright、30ファイル）は除く |
 | CI | GitHub Actions | 上記 pytest ＋ flake8 / pep257（docstring 規約）を push ごとに実行 |
 
 > 計測環境: Jetson Orin Nano 8GB, JetPack 6, Isaac ROS Dev Container
@@ -252,6 +252,23 @@ Jetson Orin Nanoの8GB共有メモリでLLM（~3GB）とYOLOパイプライン�
 </p>
 
 → Lifecycle遷移シーケンス図の詳細 → [docs/engineering_decisions.md](docs/engineering_decisions.md) (Issue-06)
+
+#### 排他だけでは足りなかった：8GB の中で「実測して削る」メモリチューニング（2026-09〜10）
+
+カメラ・SLAM/Nav2・音声を載せた本来の構成では、排他にしていても次のモードの起動時に空きが足りず、
+しかも Jetson の GPU OOM は「起動後の初回推論で落ちる」形で現れた。予算ゲートの閾値を上げるのではなく、
+**どこにメモリが残っているかを1つずつ実測して削った**。
+
+| 突き止めた原因 | 対策 | 実測効果 |
+|---|---|---|
+| LLM 停止を「固定1秒待ち」で完了扱いし、GPU 解放前に次のモデルが CUDA を確保していた | 実終了をポーリング確認してから次へ（タイムアウトで SIGKILL） | LLM→YOLO 切替の CUDA OOM 解消、CmaFree 412KB → 83〜142MB |
+| STT（faster-whisper）が推論で使わない torch を import して常駐 | torch の任意 import を遮断（モデルは small のまま） | 1492 → 669MB、ロード 37.5 → 2.3 秒、認識結果同一 |
+| YOLO-World が使い終わった CLIP を抱えたまま初回推論で GPU へ載せていた | クラス設定直後に CLIP を手放す | GPU 確保 757 → 176MB、NvMap error 4 → 0、初回推論 6.7 → 0.41 秒 |
+| llama.cpp 同梱バイナリが Orin（sm_87）非対応で毎回 CUDA JIT | sm_87 で再ビルド＋JIT キャッシュ永続化 | LLM 起動 87.5 → 32.5〜47.0 秒 |
+
+結果、音声ノードを常駐させたまま yolo → yoloworld の切替が通るようになった（以前は音声を止めないと通らなかった）。
+
+→ 仮説と検証・却下した案 → [docs/engineering_decisions.md](docs/engineering_decisions.md) (Issue-11)
 
 #### シリアル通信デッドロックの特定と解消
 
