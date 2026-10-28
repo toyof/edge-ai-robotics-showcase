@@ -65,7 +65,7 @@
 |---|---|---|---|
 | 起 | 「ヘイロボ」 | 「はい。何の処理をしましょうか？」 | STT + LLM |
 | 承 | 「人についてきて」 | 追従開始 → 障害物を自律回避 → 追従継続 | YOLO + Depth + Nav2 |
-| 転 | 「くまのぬいぐるみを探して」 | 自律探索 →「見つかりました」 | YOLO-World |
+| 転 | 「くまのぬいぐるみを探して」 | 自律探索 →「見つかりました」（🚧 開発中） | YOLO-World |
 | 結 | 「何が見える？」 | 部屋にいる人物を検出し、状況を自然文で説明 | Cloud VLM (Gemini) |
 
 > 全処理は Jetson Orin Nano (8GB) 上でリアルタイム実行（VLMのみクラウド）
@@ -80,11 +80,22 @@
 | 指定物体を追いかける | YOLO検出 → 深度推定 → Nav2ゴール生成（人がデフォルト、音声でペットボトルなど任意のCOCO物体に変更可） | YOLOv8 + Depth Anything V2 + Nav2 |
 | 見失っても諦めない | 軌跡から先回り（Tier1）→ 自律探索（Tier2）→ 再捕捉 | breadcrumb 予測 + GVD / フロンティア探索 |
 | 障害物を自律回避する | LiDAR → コストマップ → 経路再計画 | SLAM Toolbox + Nav2 (Regulated Pure Pursuit) |
-| 物体を探す | 自然言語指定 → ゼロショット検出 → 自律探索 | YOLO-World |
+| 物体を探す（🚧 開発中） | 自然言語指定 → ゼロショット検出 → 自律探索 | YOLO-World |
 | タグでルームを記憶し自己位置を復元する | AprilTag検出 → room解決 → 対応マップでAMCL初期位置投入（RViz手動操作不要） | AprilTag + AMCL + Nav2 |
 | 見えるものを説明する | カメラ画像 → Cloud VLM → 自然言語応答 | Gemini API |
 | 運用状態を可視化する | OTel収集 → 時系列DB → ダッシュボード | OpenTelemetry + Prometheus + Grafana |
 | 障害を検知・切り分けする | 仕事量×負荷の相関 → 異常検知 | Grafana アラート + 相関分析 |
+
+### 🚧 物体検索の現状（開発中）
+
+検出・接近・追従のコア機能は単体で実機検証済み。「探して → 見つけた場所へ向かう」の通し動作は実機検証待ちです。
+
+| | 状態 |
+|---|---|
+| 物体名で検出（日本語→英訳→YOLO-World）・近づいて位置確定・見失ったら再捕捉 | ✅ コア機能単体検証済 |
+| 見つけた場所を記憶し、そこへ向かう（音声からの通し） | 🚧 通し実機検証待ち |
+| 別の部屋まで探しに行く | 🚧 通し実機検証待ち |
+| 斜め・遠い・暗い位置の物体 | ⚠️ 苦手 |
 
 ---
 
@@ -399,12 +410,9 @@ def test_recovery_layer_is_not_stricter_than_guard(geo):
 > ロボットは「動く」だけでは足りない。
 > 「なぜ止まったか」「どこが劣化しているか」を説明できなければ、現場では使えない。
 
-<!-- Grafanaダッシュボードのスクリーンショット（概要 + 詳細の2枚）。 -->
+<!-- 運用画面（Azure の ops-web）のスクリーンショット。左＝状態・地図・カメラ・モード操作・LLM 会話、右＝Grafana（Robot Detail）。 -->
 <p align="center">
-  <img src="docs/images/grafana_dashboard.png" alt="Grafanaダッシュボード（概要）" width="90%">
-</p>
-<p align="center">
-  <img src="docs/images/grafana_dashboard_detail.png" alt="Grafanaダッシュボード（詳細）" width="90%">
+  <img src="docs/images/ops_dashboard.png" alt="運用画面（状態・地図・カメラ・操作・LLM会話と Grafana を1画面に）" width="80%">
 </p>
 
 ### 設計思想: 仕事量 × 負荷の相関

@@ -77,7 +77,7 @@ not been captured on video yet.
 |---|---|---|---|
 | Open | 「ヘイロボ」*(Hey Robo)* | 「はい。何の処理をしましょうか？」*("Yes, what would you like me to do?")* | STT + LLM |
 | Follow | 「人についてきて」*(Follow this person)* | Starts following → avoids obstacles autonomously → keeps following | YOLO + Depth + Nav2 |
-| Search | 「くまのぬいぐるみを探して」*(Find the teddy bear)* | Explores autonomously → 「見つかりました」*("Found it")* | YOLO-World |
+| Search | 「くまのぬいぐるみを探して」*(Find the teddy bear)* | Explores autonomously → 「見つかりました」*("Found it")* (🚧 in development) | YOLO-World |
 | Describe | 「何が見える？」*(What do you see?)* | Detects the people in the room and describes the scene in natural language | Cloud VLM (Gemini) |
 
 > Everything runs in real time on-device on a Jetson Orin Nano (8GB), except the VLM step, which uses the cloud.
@@ -92,11 +92,22 @@ not been captured on video yet.
 | Follows a specified object | YOLO detection → depth estimation → Nav2 goal generation (defaults to a person; switchable by voice to any COCO object, e.g. a bottle) | YOLOv8 + Depth Anything V2 + Nav2 |
 | Doesn't give up when it loses you | Predicts ahead from the tracked trail (Tier 1) → autonomous search (Tier 2) → re-acquire | Breadcrumb prediction + GVD / frontier exploration |
 | Avoids obstacles autonomously | LiDAR → costmap → path re-planning | SLAM Toolbox + Nav2 (Regulated Pure Pursuit) |
-| Searches for an object | Natural-language query → zero-shot detection → autonomous exploration | YOLO-World |
+| Searches for an object (🚧 in development) | Natural-language query → zero-shot detection → autonomous exploration | YOLO-World |
 | Remembers rooms via tags, recovers its pose | AprilTag detection → room resolution → AMCL initial-pose injection with the matching map (no manual RViz step) | AprilTag + AMCL + Nav2 |
 | Describes what it sees | Camera frame → cloud VLM → natural-language answer | Gemini API |
 | Visualizes operational state | OTel collection → time-series DB → dashboard | OpenTelemetry + Prometheus + Grafana |
 | Detects and triages failures | Correlates workload × load → anomaly detection | Grafana alerts + correlation analysis |
+
+### 🚧 Object search: current status (in development)
+
+The core functions (detection, approach, following) have each been verified on the robot. The end-to-end flow "find it → drive to where it was found" is awaiting verification on the robot.
+
+| | Status |
+|---|---|
+| Detect by name (Japanese → English → YOLO-World), approach to confirm the position, re-acquire on loss | ✅ Core functions verified individually |
+| Remember where it was found and drive there (full voice-driven flow) | 🚧 Awaiting end-to-end verification on the robot |
+| Search into another room | 🚧 Awaiting end-to-end verification on the robot |
+| Objects at an angle, far away, or in the dark | ⚠️ Weak |
 
 ---
 
@@ -428,12 +439,9 @@ a test that would not fail is protecting nothing.
 > A robot that just "moves" isn't enough.
 > If you can't explain *why* it stopped or *where* it's degrading, it's not usable in the field.
 
-<!-- Grafana dashboard screenshots (overview + detail). -->
+<!-- Ops screen (ops-web on Azure). Left: state, map, camera, mode controls, LLM chat. Right: Grafana (Robot Detail). -->
 <p align="center">
-  <img src="docs/images/grafana_dashboard.png" alt="Grafana dashboard (overview)" width="90%">
-</p>
-<p align="center">
-  <img src="docs/images/grafana_dashboard_detail.png" alt="Grafana dashboard (detail)" width="90%">
+  <img src="docs/images/ops_dashboard.png" alt="Ops screen (state, map, camera, controls, LLM chat and Grafana on one page)" width="80%">
 </p>
 
 ### Design principle: correlate workload × load

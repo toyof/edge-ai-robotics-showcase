@@ -7,8 +7,7 @@ README（日本語版・英語版）が参照する画像を置くディレク�
 |---|---|---|
 | `robot_front.jpg` | ロボット実機・正面斜めからの写真 | 明るい場所、背景を片付けて撮影 |
 | `robot_side.jpg` | ロボット実機・別角度（側面 or もう一方の斜め） | 上と違う角度にする |
-| `grafana_dashboard.png` | Grafanaダッシュボード（Robot Overview） | 実際に稼働中のパネルが見えている状態 |
-| `grafana_dashboard_detail.png` | Grafanaダッシュボード（Robot Detail） | 同上 |
+| `ops_dashboard.png` | 運用画面（Azure の ops-web：状態・地図・カメラ・操作・LLM会話＋Grafana Robot Detail） | 実際に稼働中のパネルが見えている状態。サインイン中のアカウント表示は隠す |
 | `guard_corridor_vs_sector.png` | GUARD安全ゲート：扇形方式とコリドー方式の幾何比較 | Engineering Challenges「発生源を問わない最終安全ゲート」 |
 | `ai_mode_memory_budget.png` | LLM/YOLO排他制御のメモリ使用量概算 | Engineering Challenges「8GBメモリ制約下でのLLM/YOLO排他制御」 |
 | `serial_buffer_backlog.png` | シリアル通信RXバッファ滞留の実測推移 | Engineering Challenges「シリアル通信デッドロックの特定と解消」 |
