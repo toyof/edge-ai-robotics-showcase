@@ -64,6 +64,7 @@ src/
 │       ├── wheel_odom_logic.py       # オドメトリ・スリップ/拘束検知ロジック（ROS2非依存・pytest対象）
 │       ├── laser_odom_node.py        # 並進限定レーザーオドメトリ（N24-68、既定 true で起動）
 │       ├── robot_state_aggregator_node.py # 体の状態一式を obs/robot_state へ 10Hz（RF-3、既定 false）
+│       ├── cmd_vel_arbiter_node.py   # 速度指令の調停（teleop > direct > cloud > policy > legacy、RF-1、`.env` の ROBOT_CMD_VEL_ARBITER で有効化）
 │       ├── turret_tracker_node.py    # PIDカメラ砲塔制御
 │       ├── pico_stub_node.py         # Picoスタブ（ハードウェアなし確認用）
 │       ├── imu_sim_node.py           # （simのみ）IMU代替
@@ -132,6 +133,7 @@ src/
 │       ├── llm_agent_node.py                  # LLMエージェント（脳）
 │       ├── robot_agent.py                     # ROS2コマンドディスパッチ・Gemini VLM
 │       ├── ai_mode_manager_node.py            # AI モード排他制御マネージャー（旧 state_manager）
+│       ├── perception_aggregator_node.py      # 外界の知覚を obs/perception へ 10Hz（RF-10a、既定 false）
 │       ├── mode_admission_logic.py            # モード切替命令の受付ゲート（single-flight、ROS2非依存、T-55）
 │       ├── control_mode_logic.py              # 運用モード(auto/manual)判定ロジック（ROS2非依存、T-53）
 │       ├── yolo_follow_lifecycle_node.py      # YOLOv8 物体追従 Lifecycle ノード（Step 3）
@@ -152,7 +154,10 @@ src/
 │       ├── metrics_node.py          # 軸2: OS / ROS 2 負荷メトリクス収集（vmstat・tegrastats）
 │       ├── critical_alert_node.py   # RobotLog.error()のLINE即時通知（N-OBS-7）
 │       ├── process_monitor_node.py  # モード別プロセス/ノードの残存・欠落監視（T-AT-6-31）
-│       └── ash_sampler_node.py      # ASH: 1Hzで activity × 待ち事象を runs/<run_id>/ash.jsonl へ記録（ASH-1）
+│       ├── ash_sampler_node.py      # ASH: 1Hzで activity × 待ち事象を runs/<run_id>/ash.jsonl へ記録（ASH-1）
+│       ├── bag_throttle_node.py     # 学習用 rosbag 向けに画像を 1Hz へ間引いて中継（RF-13b）
+│       ├── bag_uploader_node.py     # 閉じた bag 分割を Azure Blob へ送ってローカルを消す（RF-13b、既定無効）
+│       └── conversation_log_node.py # 会話ログを Log パネル用トピックへ中継（N-VIZ-26a）
 │
 ├── toyof_robot_subagent_vision/  # F-3-1: 固定PCカメラの死角補完（ament_python、Isaac ROS非依存）
 │   └── toyof_robot_subagent_vision/
