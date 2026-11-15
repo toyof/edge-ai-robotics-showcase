@@ -157,7 +157,8 @@ src/
 │       ├── ash_sampler_node.py      # ASH: 1Hzで activity × 待ち事象を runs/<run_id>/ash.jsonl へ記録（ASH-1）
 │       ├── bag_throttle_node.py     # 学習用 rosbag 向けに画像を 1Hz へ間引いて中継（RF-13b）
 │       ├── bag_uploader_node.py     # 閉じた bag 分割を Azure Blob へ送ってローカルを消す（RF-13b、既定無効）
-│       └── conversation_log_node.py # 会話ログを Log パネル用トピックへ中継（N-VIZ-26a）
+│       ├── conversation_log_node.py # 会話ログを Log パネル用トピックへ中継（N-VIZ-26a）
+│       └── wheel_trust_trail_node.py # wheel_trust を走行軌跡の色として 3D パネルへ（N-VIZ-30）
 │
 ├── toyof_robot_subagent_vision/  # F-3-1: 固定PCカメラの死角補完（ament_python、Isaac ROS非依存）
 │   └── toyof_robot_subagent_vision/

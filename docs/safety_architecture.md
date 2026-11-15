@@ -170,6 +170,22 @@ GUARD（§3.1）は「前進だけを直線コリドーで見る」最終安全�
 
 詳細 → CLAUDE.md §6.7、`docs/design_notes.md` N24-94 / N24-104 / N24-105。
 
+## 3.1b GUARD 周辺の追加（2026-10〜11、実機検証は各タスクの b 項目）
+
+- **RF-1 速度指令の調停**: `.env` の `ROBOT_CMD_VEL_ARBITER` が立っていると `cmd_vel_arbiter_node` が
+  teleop > direct > cloud > policy（シャドー） > legacy の順で1つを `cmd_vel/arbitrated` へ流し、`pico_bridge_node`
+  がそれを購読する。`cmd_vel/estop`（latched）が true の間はゼロのみ。調停役が落ちると止まる側に倒れる。
+  GUARD は調停より下流なので、どの発生源の指令にも等しく効く。未設定（既定）は従来どおり。
+- **N24-99d-e GUARD 焼き込み**: GUARD が止めた場所（`cmd_vel_guard/speed_scale` 0.05 以下が1秒続いた）の
+  通路内の点を `guard_evidence_node` が `/map_hardened` へ書き込ませる。強度フィルタは地図側だけで、
+  GUARD が見るスキャンには掛けない（N24-99d-d、暗い物を見逃さないため）。見通せたら消す。ロールバックは `guard_evidence:=false`。
+- **W-8-4b / W-8-4e バンパー（接触スイッチ）**: Pico が割り込みで即停止し、ホストは GUARD の信号へ合流する。
+  入力は6本（正面・角4・真後ろ）。角は当たった瞬間の指令で押し付けた面を決め、その面へ押し付ける指令だけ止める
+  （旋回・反対向きは通す）。`bumper_evidence_node` が離れてから当たった場所を地図へ焼く（既定 false）。
+  ファーム `USE_BUMPER` は既定 False、配線・実機確認は W-8-4b2 / W-8-4e2。
+
+詳細 → CLAUDE.md §6.7、`docs/design_notes.md` W-8-4b / W-8-4e / N24-99d-e、`docs/physical_ai_roadmap.md` §7.1。
+
 ## 3.2 GUARD の持続ブロック検知（N13-4）
 
 GUARD が一瞬止めるだけでは「壁に張り付いたまま前進を送り続ける」状態を止められない。
