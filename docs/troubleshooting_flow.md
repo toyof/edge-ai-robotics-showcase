@@ -114,5 +114,29 @@ Jetson Orin Nano 8GB の制約下で、重い AI ノード（LLM / YOLO / YOLO-W
 
 ---
 
+## 既知の環境トラブル（Jetson・開発 PC）
+
+アラートでは捕まらない、環境側で起きる障害の記録。いずれも発生時点（2026年2月ごろ）の事実で、現行の対策状況は各項の「いま」に書く。
+
+### E1: apt の自動更新のあと、Isaac ROS のノードが起動しなくなる
+
+- **症状**: 前日まで動いていた `isaac_ros_yolov8` が起動せず、`NitrosContext: cudaErrorNotSupported` → `setCUDAMemoryPoolSize Error: GXF_FAILURE` → `terminate called after throwing an instance of 'std::runtime_error'`。コードは変えていない。
+- **原因（2つ）**:
+  1. ホストの TensorRT が 10.3.0.30 → 10.7.0.23 へ上がった。Isaac ROS のコンテナは 10.3 向けにビルドされている。
+  2. `nvidia-container-toolkit` が 1.16.2 → 1.18.2 へ上がり、コンテナから見た `/dev/nvmap` のグループ権限と CUDA の初期化（`cuInit`）が変わった。
+- **見分け方**: ホストとコンテナの `dpkg -l | grep -E 'tensorrt|nvinfer'` の版を並べて比べる。`/dev/nvmap` の所有グループもホストとコンテナで比べる。
+- **復旧**: TensorRT 関連パッケージを 10.3.0.30-1+cuda12.5 へ、`nvidia-container-toolkit` 系を 1.16.2-1 へ `apt install --allow-downgrades` で戻し、`systemctl restart docker`。TensorRT エンジン（`.plan`）は作り直す（`models/` の書き込み権限を確認）。
+- **予防**: `apt-daily.timer`・`apt-daily-upgrade.timer` を止める。`/etc/apt/preferences.d/` で `tensorrt` と `nvidia-container-toolkit` の版を固定する（`apt-cache policy` で Pinned 表示を確認）。
+- **いま**: 固定が今の Jetson で効いているかは未確認。確認は `apt-cache policy tensorrt nvidia-container-toolkit`。新しいパッケージを入れる前に、上のパッケージが `apt list --upgradable` に出ないかを見る。
+- 経緯の読み物: `docs/blog_drafts/article_03_jetson_autoupdate_incident.md`。
+
+### E2: 画像トピックを流すと Jetson が固まり SSH まで切れる
+
+- **症状**: 既定の設定で画像を流すと 2〜3 秒でフリーズし、SSH も切れる。画像サイズ・FPS・QoS を下げると続く。
+- **仮説（原因は 1 つに確定していない）**: ①画像が Reliable で、受け手（PC・ネットワーク）が遅いと DDS の送り手側に未送達のメッセージが溜まりメモリ・CPU を食う ②CPU／softirq の飽和（変換・コピー・シリアライズ）③WSL・RViz の描画やネットワーク帯域がボトルネックで再送・滞留が上流へ波及 ④USB／V4L2 側。
+- **見るもの**: `tegrastats`（全体）・`free`／`vmstat`（メモリ・スワップ）・`top -H`（スレッド）・`dmesg`（OOM・soft lockup）・`ss -tnp`（Send-Q/Recv-Q の肥大）・`ip -s link`（drop/overrun）。ROS 側は `ros2 topic hz／bw`。
+- **対策（現行）**: 生画像を常時流さず、圧縮画像（`image_raw/compressed`）を配信し、購読も必要なときだけ（N-OBS-4、T-57）。生画像の Reliable 購読を増やさない。
+- 詳細: 古い調査メモは gtd の `99_Archive/PJ-Jetson環境トラブルと復旧.md`。
+
 > 注: このフローは異常の**一次切り分け**を目的とする。恒久対策や根本原因分析は
 > 各作業領域の `todo/logs/<領域>.md` を参照すること。

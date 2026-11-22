@@ -183,6 +183,10 @@ GUARD（§3.1）は「前進だけを直線コリドーで見る」最終安全�
   入力は6本（正面・角4・真後ろ）。角は当たった瞬間の指令で押し付けた面を決め、その面へ押し付ける指令だけ止める
   （旋回・反対向きは通す）。`bumper_evidence_node` が離れてから当たった場所を地図へ焼く（既定 false）。
   ファーム `USE_BUMPER` は既定 False、配線・実機確認は W-8-4b2 / W-8-4e2。
+- **W-14e 速度指令の加速制限**: `pico_bridge_node` が安全層（バンパー・GUARD・stuck・旋回の突っ張り）より前で、
+  発生源を問わず**加速だけ**を `nav2_params.yaml` の `velocity_smoother.max_accel`（直進 0.15 m/s²・回転 1.0 rad/s²）に絞る
+  （`cmd_accel_limit_logic.py`）。減速・停止・安全層の 0 は即座。読めなければ絞らない。
+  ロールバックは `cmd_accel_limit_enabled: false`、実機確認は W-14e-b。
 
 詳細 → CLAUDE.md §6.7、`docs/design_notes.md` W-8-4b / W-8-4e / N24-99d-e、`docs/physical_ai_roadmap.md` §7.1。
 
